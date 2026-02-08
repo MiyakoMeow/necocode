@@ -80,8 +80,11 @@ async fn main() -> Result<()> {
             "content": user_input,
         }));
 
-        // Run agentic loop
-        if let Err(e) = client.run_agent_loop(&mut messages, &system_prompt).await {
+        // Run agentic loop (streaming)
+        if let Err(e) = client
+            .run_agent_loop_stream(&mut messages, &system_prompt, &schema::make_schema())
+            .await
+        {
             println!("{}⏺ Error: {}{}", colors::RED, e, colors::RESET);
         }
 
