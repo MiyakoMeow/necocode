@@ -60,6 +60,7 @@ pub enum ContentBlock {
     #[serde(rename = "text")]
     Text {
         #[serde(default)]
+        #[allow(dead_code)]
         text: String,
     },
     #[serde(rename = "tool_use")]
@@ -402,7 +403,8 @@ impl AnthropicClient {
             while let Some(event_result) = stream.next().await {
                 let event = event_result?;
 
-                match event {
+                #[allow(clippy::collapsible_match)]
+                match &event {
                     StreamEvent::ContentBlockDelta { delta, .. } => {
                         if let Delta::Text { text } = delta {
                             // 实时输出文本
@@ -410,7 +412,7 @@ impl AnthropicClient {
                             std::io::stdout().flush().map_err(|e: std::io::Error| {
                                 ApiError::StreamError(e.to_string())
                             })?;
-                            current_text.push_str(&text);
+                            current_text.push_str(text);
                         }
                     }
 
@@ -419,10 +421,8 @@ impl AnthropicClient {
                             ContentBlock::ToolUse { id, name, .. } => {
                                 println!("\n🔧 Tool call: {name} (id: {id})");
                             }
-                            ContentBlock::Text { text } => {
+                            ContentBlock::Text { .. } => {
                                 // Note: text content is delivered via delta, not here
-                                // We read the field to avoid dead code warnings
-                                let _ = text.len();
                             }
                         }
                     }
@@ -432,15 +432,16 @@ impl AnthropicClient {
                     }
 
                     StreamEvent::MessageStop => {
-                        println!();
                         break;
                     }
 
                     _ => {
-                        // 处理工具调用收集
-                        tool_collector.process_event(&event);
+                        // Other events don't need special handling
                     }
                 }
+
+                // Process event for tool collection after match
+                tool_collector.process_event(&event);
             }
 
             // 检查是否有已完成的工具调用
