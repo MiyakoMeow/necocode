@@ -165,7 +165,7 @@ fn bash_tool_def() -> ToolDef {
 /// # Returns
 ///
 /// Vector of tool schema definitions compatible with Anthropic Messages API.
-pub fn make_schema() -> Vec<Value> {
+pub fn tool_schemas() -> Vec<Value> {
     let tools = vec![
         read_tool_def(),
         write_tool_def(),

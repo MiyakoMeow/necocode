@@ -5,7 +5,6 @@ mod api;
 /// 配置模块 - 管理应用配置和环境变量
 mod config;
 /// 模式定义模块 - 定义工具调用的JSON模式
-mod schema;
 /// 工具模块 - 提供AI助手可用的工具函数
 mod tools;
 /// 用户界面模块 - 处理终端显示和交互界面
@@ -17,7 +16,7 @@ use serde_json::json;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-use api::anthropic::Client;
+use api::anthropic::{AnthropicConfig, Client};
 use config::Config;
 use ui::{colors, separator};
 
@@ -120,6 +119,7 @@ fn main() -> ExitCode {
 
     // 加载配置
     let config = Config::from_env();
+    let anthropic_config = AnthropicConfig::from_env();
 
     // 显示启动信息
     println!(
@@ -127,13 +127,13 @@ fn main() -> ExitCode {
         colors::BOLD,
         colors::RESET,
         colors::DIM,
-        config.model,
+        anthropic_config.model,
         colors::RESET,
         colors::YELLOW,
-        config.masked_api_key(),
+        anthropic_config.masked_api_key(),
         colors::RESET,
         colors::DIM,
-        config.base_url,
+        anthropic_config.base_url,
         colors::RESET,
         colors::DIM,
         config.cwd,
@@ -146,11 +146,11 @@ fn main() -> ExitCode {
     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
     // 创建 API 客户端
-    let client = Client::new(config.clone());
+    let client = Client::new(anthropic_config.clone());
 
     // 准备系统提示和工具schema
     let system_prompt = format!("Concise coding assistant. cwd: {}", config.cwd);
-    let schema = schema::make_schema();
+    let schema = api::anthropic::schema::tool_schemas();
 
     // 根据参数选择运行模式
     let result = rt.block_on(async {

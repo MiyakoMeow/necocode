@@ -2,7 +2,8 @@
 //!
 //! Handles API calls and the agentic loop for tool execution.
 
-use crate::config::Config;
+pub mod schema;
+
 use crate::tools;
 use anyhow::Result;
 use futures::stream::Stream;
@@ -11,6 +12,76 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::Write;
 use std::pin::Pin;
+
+/// Anthropic API configuration.
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Clone)]
+pub struct AnthropicConfig {
+    /// Base URL for Anthropic API
+    pub base_url: String,
+    /// Model identifier to use
+    pub model: String,
+    /// API authentication token
+    pub api_key: String,
+}
+
+impl AnthropicConfig {
+    /// Load Anthropic configuration from environment variables with defaults.
+    ///
+    /// # Environment Variables
+    ///
+    /// - `ANTHROPIC_BASE_URL`: Base URL for API (default: "<https://api.anthropic.com>")
+    /// - `ANTHROPIC_MODEL` or `MODEL`: Model to use (default: "claude-opus-4-5")
+    /// - `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`: API key
+    ///
+    /// # Returns
+    ///
+    /// Returns the configuration with defaults applied.
+    #[must_use]
+    pub fn from_env() -> Self {
+        use std::env;
+
+        let base_url = env::var("ANTHROPIC_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+
+        let model = env::var("ANTHROPIC_MODEL")
+            .or_else(|_| env::var("MODEL"))
+            .unwrap_or_else(|_| "claude-opus-4-5".to_string());
+
+        let api_key = env::var("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| env::var("ANTHROPIC_API_KEY"))
+            .unwrap_or_default();
+
+        Self {
+            base_url,
+            model,
+            api_key,
+        }
+    }
+
+    /// Get the masked API key for display (shows only first and last 4 chars).
+    ///
+    /// # Returns
+    ///
+    /// A masked version of the API key suitable for display.
+    #[must_use]
+    pub fn masked_api_key(&self) -> String {
+        let key = &self.api_key;
+        if key.len() > 8 {
+            format!("{}...{}", &key[..4], &key[key.len() - 4..])
+        } else if !key.is_empty() {
+            "*".repeat(key.len())
+        } else {
+            "(no key)".to_string()
+        }
+    }
+}
+
+impl Default for AnthropicConfig {
+    fn default() -> Self {
+        Self::from_env()
+    }
+}
 
 /// API错误类型
 #[derive(Debug, Clone, thiserror::Error)]
@@ -84,9 +155,8 @@ pub enum ContentBlock {
     #[serde(rename = "text")]
     Text {
         /// 文本内容
-        #[serde(default)]
-        #[allow(dead_code)]
-        text: String,
+        #[serde(default, rename = "text")]
+        _text: String,
     },
     /// 工具调用内容块，描述需要执行的函数调用
     #[serde(rename = "tool_use")]
@@ -248,101 +318,98 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
     use futures::stream::StreamExt;
 
     Box::pin(async_stream::stream! {
-        let mut buffer = String::new();
-        let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            let mut stream = response.bytes_stream();
 
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = match chunk_result {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    yield Err(ApiError::StreamError(format!("Failed to read stream: {e}")));
-                    continue;
-                }
-            };
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        yield Err(ApiError::StreamError(format!("Failed to read stream: {e}")));
+                        continue;
+                    }
+                };
 
-            // 将字节转换为字符串并处理
-            let chunk_str = match String::from_utf8(chunk.to_vec()) {
-                Ok(s) => s,
-                Err(e) => {
-                    yield Err(ApiError::ParseError(format!("Invalid UTF-8: {e}")));
-                    continue;
-                }
-            };
+                // 将字节转换为字符串并处理
+                let chunk_str = match String::from_utf8(chunk.to_vec()) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        yield Err(ApiError::ParseError(format!("Invalid UTF-8: {e}")));
+                        continue;
+                    }
+                };
 
-            buffer.push_str(&chunk_str);
+                buffer.push_str(&chunk_str);
 
-            // 按行分割
-            while let Some(newline_pos) = buffer.find('\n') {
-                let line = buffer[..newline_pos].to_string();
-                buffer = buffer[newline_pos + 1..].to_string();
+                // 按行分割
+                while let Some(newline_pos) = buffer.find('\n') {
+                    let line = buffer[..newline_pos].to_string();
+                    buffer = buffer[newline_pos + 1..].to_string();
 
-                // 跳过空行
-                if line.is_empty() {
-                    continue;
-                }
-
-                // SSE格式解析
-                if let Some(data) = line.strip_prefix("data: ") {
-                    // 跳过"[DONE]"标记
-                    if data == "[DONE]" {
-                        yield Ok(StreamEvent::MessageStop);
+                    // 跳过空行
+                    if line.is_empty() {
                         continue;
                     }
 
-                    // 解析JSON
-                    match serde_json::from_str::<Value>(data) {
-                        Ok(value) => {
-                            if let Some(event_type) = value.get("type").and_then(|v| v.as_str()) {
-                                let event = match event_type {
-                                    "message_start" => StreamEvent::MessageStart,
-                                    "content_block_start" => {
-                                        if let Some(block) = value.get("content_block") {
-                                            StreamEvent::ContentBlockStart {
-                                                #[allow(clippy::cast_possible_truncation)]
-                                                index: value.get("index").and_then(Value::as_u64).unwrap_or(0) as u32,
-                                                content_block: serde_json::from_value(block.clone())
-                                                    .unwrap_or(ContentBlock::Text { text: String::new() }),
-                                            }
-                                        } else {
-                                            continue;
-                                        }
-                                    }
-                                    "content_block_delta" => {
-                                        StreamEvent::ContentBlockDelta {
-                                            #[allow(clippy::cast_possible_truncation)]
-                                            index: value.get("index").and_then(Value::as_u64).unwrap_or(0) as u32,
-                                            delta: serde_json::from_value(value.get("delta").cloned().unwrap_or_default())
-                                                .unwrap_or(Delta::Text { text: String::new() }),
-                                        }
-                                    }
-                                    "content_block_stop" => StreamEvent::ContentBlockStop {
-                                        #[allow(clippy::cast_possible_truncation)]
-                                        index: value.get("index").and_then(Value::as_u64).unwrap_or(0) as u32,
-                                    },
-                                    "message_delta" => StreamEvent::MessageDelta,
-                                    "message_stop" => StreamEvent::MessageStop,
-                                    "error" => StreamEvent::Error {
-                                        error: ApiError::Api(
-                                            value.get("error")
-                                                .and_then(|e| e.get("message"))
-                                                .and_then(|m| m.as_str())
-                                                .unwrap_or("Unknown error")
-                                                .to_string()
-                                        ),
-                                    },
-                                    _ => continue,
-                                };
-                                yield Ok(event);
-                            }
+                    // SSE格式解析
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        // 跳过"[DONE]"标记
+                        if data == "[DONE]" {
+                            yield Ok(StreamEvent::MessageStop);
+                            continue;
                         }
-                        Err(e) => {
-                            yield Err(ApiError::ParseError(format!("Failed to parse SSE data: {e}")));
+
+                        // 解析JSON
+                        match serde_json::from_str::<Value>(data) {
+                            Ok(value) => {
+                                if let Some(event_type) = value.get("type").and_then(|v| v.as_str()) {
+                                    let event = match event_type {
+                                        "message_start" => StreamEvent::MessageStart,
+                                        "content_block_start" => {
+                                            if let Some(block) = value.get("content_block") {
+    StreamEvent::ContentBlockStart {
+                                            index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                            content_block: serde_json::from_value(block.clone())
+                                                .unwrap_or(ContentBlock::Text { _text: String::new() }),
+                                        }
+                                            } else {
+                                                continue;
+                                            }
+                                        }
+                                        "content_block_delta" => {
+    StreamEvent::ContentBlockDelta {
+                                                index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                                delta: serde_json::from_value(value.get("delta").cloned().unwrap_or_default())
+                                                    .unwrap_or(Delta::Text { text: String::new() }),
+                                            }
+                                        }
+    "content_block_stop" => StreamEvent::ContentBlockStop {
+                                            index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                        },
+                                        "message_delta" => StreamEvent::MessageDelta,
+                                        "message_stop" => StreamEvent::MessageStop,
+                                        "error" => StreamEvent::Error {
+                                            error: ApiError::Api(
+                                                value.get("error")
+                                                    .and_then(|e| e.get("message"))
+                                                    .and_then(|m| m.as_str())
+                                                    .unwrap_or("Unknown error")
+                                                    .to_string()
+                                            ),
+                                        },
+                                        _ => continue,
+                                    };
+                                    yield Ok(event);
+                                }
+                            }
+                            Err(e) => {
+                                yield Err(ApiError::ParseError(format!("Failed to parse SSE data: {e}")));
+                            }
                         }
                     }
                 }
             }
-        }
-    })
+        })
 }
 
 /// API client.
@@ -350,12 +417,12 @@ pub struct Client {
     /// HTTP客户端，用于发送API请求
     http_client: HttpClient,
     /// API配置，包含密钥、基础URL等信息
-    config: Config,
+    config: AnthropicConfig,
 }
 
 impl Client {
     /// Create a new API client with the given configuration.
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: AnthropicConfig) -> Self {
         Self {
             http_client: HttpClient::new(),
             config,
@@ -456,28 +523,24 @@ impl Client {
             while let Some(event_result) = stream.next().await {
                 let event = event_result?;
 
-                #[allow(clippy::collapsible_match)]
                 match &event {
-                    StreamEvent::ContentBlockDelta { delta, .. } => {
-                        if let Delta::Text { text } = delta {
-                            // 实时输出文本
-                            print!("{text}");
-                            std::io::stdout().flush().map_err(|e: std::io::Error| {
-                                ApiError::StreamError(e.to_string())
-                            })?;
-                            current_text.push_str(text);
-                        }
+                    StreamEvent::ContentBlockDelta {
+                        delta: Delta::Text { text },
+                        ..
+                    } => {
+                        // 实时输出文本
+                        print!("{text}");
+                        std::io::stdout()
+                            .flush()
+                            .map_err(|e: std::io::Error| ApiError::StreamError(e.to_string()))?;
+                        current_text.push_str(text);
                     }
 
-                    StreamEvent::ContentBlockStart { content_block, .. } => {
-                        match content_block {
-                            ContentBlock::ToolUse { id, name, .. } => {
-                                println!("\n🔧 Tool call: {name} (id: {id})");
-                            }
-                            ContentBlock::Text { .. } => {
-                                // Note: text content is delivered via delta, not here
-                            }
-                        }
+                    StreamEvent::ContentBlockStart {
+                        content_block: ContentBlock::ToolUse { id, name, .. },
+                        ..
+                    } => {
+                        println!("\n🔧 Tool call: {name} (id: {id})");
                     }
 
                     StreamEvent::Error { error } => {
@@ -793,7 +856,7 @@ mod tests {
             }
         };
         match text {
-            ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
+            ContentBlock::Text { _text: t } => assert_eq!(t, "Hello"),
             ContentBlock::ToolUse { .. } => {
                 unreachable!("Expected Text variant but got ToolUse in test")
             }
