@@ -833,6 +833,7 @@ dependencies = [
  "clap",
  "futures",
  "glob",
+ "nyan-code-tui",
  "regex",
  "reqwest",
  "serde",
@@ -841,6 +842,10 @@ dependencies = [
  "tokio",
  "walkdir",
 ]
+
+[[package]]
+name = "nyan-code-tui"
+version = "0.1.0"
 
 [[package]]
 name = "once_cell"

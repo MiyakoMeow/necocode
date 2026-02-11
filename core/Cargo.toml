@@ -16,3 +16,4 @@ walkdir.workspace = true
 clap.workspace = true
 futures.workspace = true
 async-stream.workspace = true
+nyan-code-tui = { path = "../tui" }

@@ -1,0 +1,6 @@
+[package]
+name = "nyan-code-tui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

@@ -7,8 +7,6 @@ mod config;
 /// 模式定义模块 - 定义工具调用的JSON模式
 /// 工具模块 - 提供AI助手可用的工具函数
 mod tools;
-/// 用户界面模块 - 处理终端显示和交互界面
-mod ui;
 
 use anyhow::Result;
 use clap::Parser;
@@ -18,7 +16,7 @@ use std::process::ExitCode;
 
 use api::anthropic::{AnthropicConfig, Client};
 use config::Config;
-use ui::{colors, separator};
+use nyan_code_tui::{colors, separator};
 
 /// AI编程助手 - Claude Code Rust实现
 #[derive(Parser, Debug)]
