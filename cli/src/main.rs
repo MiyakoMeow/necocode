@@ -7,6 +7,7 @@ use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
 use serde_json::json;
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
@@ -14,6 +15,20 @@ use necocode::separator;
 
 // 使用 core 库模块
 use necocode_core::{AnthropicConfig, Client, Config, CoreEvent};
+
+mod logging;
+
+/// 初始化日志系统，返回是否成功
+fn setup_logging(config: &Config) -> bool {
+    let log_dir = Path::new(&config.cwd).join("logs");
+    match logging::init_logging(&log_dir) {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("Failed to initialize logging: {}", e);
+            false
+        }
+    }
+}
 
 /// AI编程助手 - Claude Code Rust实现
 #[derive(Parser, Debug)]
@@ -115,24 +130,30 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                 io::stdout().flush().unwrap();
             }
             CoreEvent::ToolCallStart { id, name } => {
+                tracing::debug!(tool = %name, tool_id = %id, "Tool call started");
                 println!("\n🔧 {} (id: {})", name.yellow().bold(), id);
             }
             CoreEvent::ToolExecuting { name } => {
+                tracing::info!(tool = %name, "Tool executing");
                 println!("{}⚙️ {}执行中...", Attribute::Bold, name);
             }
             CoreEvent::ToolResult { name, result } => {
+                tracing::debug!(tool = %name, result_len = result.len(), "Tool result received");
                 println!("\n📝 {} 结果:", name.green().bold());
                 println!("{}", result);
                 print!("{}", separator());
             }
             CoreEvent::Error(error) => {
+                tracing::error!(error = %error, "Core error occurred");
                 println!("\n{} 错误: {}", "❌".red(), error);
                 print!("{}", separator());
             }
             CoreEvent::MessageStart => {
+                tracing::debug!("Message started");
                 print!("{}", separator());
             }
             CoreEvent::MessageStop => {
+                tracing::debug!("Message stopped");
                 print!("{}", separator());
             }
         }
@@ -158,6 +179,8 @@ fn main() -> ExitCode {
         config.cwd.clone().dim()
     );
 
+    // 初始化日志系统
+    let _logging_enabled = setup_logging(&config);
     // 创建运行时
     // SAFETY: Runtime creation failure is unrecoverable and should terminate the program.
     #[allow(clippy::expect_used)]
