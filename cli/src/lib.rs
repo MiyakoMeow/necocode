@@ -1,4 +1,4 @@
-//! TUI utilities for nyan-code.
+//! CLI utilities for necocode.
 
 pub mod colors;
 pub mod separator;

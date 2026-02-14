@@ -1,10 +1,10 @@
 [package]
-name = "nyan-code-tui"
+name = "necocode"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-nyan-code = { path = "../core" }
+necocode-core = { path = "../core" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -19,5 +19,5 @@ async-stream.workspace = true
 thiserror.workspace = true
 
 [[bin]]
-name = "nyan-code-tui"
+name = "necocode"
 path = "src/main.rs"

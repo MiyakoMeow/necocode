@@ -1,5 +1,5 @@
 [package]
-name = "nyan-code"
+name = "necocode-core"
 version.workspace = true
 edition.workspace = true
 

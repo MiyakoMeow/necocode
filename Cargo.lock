@@ -825,7 +825,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nyan-code"
+name = "necocode"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -833,6 +833,7 @@ dependencies = [
  "clap",
  "futures",
  "glob",
+ "necocode-core",
  "regex",
  "reqwest",
  "serde",
@@ -843,7 +844,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nyan-code-tui"
+name = "necocode-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -851,7 +852,6 @@ dependencies = [
  "clap",
  "futures",
  "glob",
- "nyan-code",
  "regex",
  "reqwest",
  "serde",

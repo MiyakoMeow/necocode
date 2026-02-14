@@ -9,10 +9,10 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
-use nyan_code_tui::{colors, separator};
+use necocode::{colors, separator};
 
 // 使用 core 库模块
-use nyan_code::{AnthropicConfig, Client, Config, CoreEvent};
+use necocode_core::{AnthropicConfig, Client, Config, CoreEvent};
 
 /// AI编程助手 - Claude Code Rust实现
 #[derive(Parser, Debug)]
@@ -175,7 +175,7 @@ fn main() -> ExitCode {
 
     // 显示启动信息
     println!(
-        "{}nanocode{} | {}{}{} | {}{}{} | {}{}{} | {}{}{}\n",
+        "{}necocode{} | {}{}{} | {}{}{} | {}{}{} | {}{}{}\n",
         colors::BOLD,
         colors::RESET,
         colors::DIM,
@@ -205,7 +205,7 @@ fn main() -> ExitCode {
 
     // 准备系统提示和工具schema
     let system_prompt = format!("Concise coding assistant. cwd: {}", config.cwd);
-    let schema = nyan_code::api::anthropic::schema::tool_schemas();
+    let schema = necocode_core::api::anthropic::schema::tool_schemas();
 
     // 启动事件处理任务
     let handle = rt.spawn(async move {

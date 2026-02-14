@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "tui"]
+members = ["core", "cli"]
 default-members = ["core"]
 resolver = "3"
 
