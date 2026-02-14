@@ -1,7 +1,6 @@
 //! Terminal separator line utilities.
 
-use crate::colors;
-use std::env;
+use crossterm::{style::Stylize, terminal};
 
 /// Generate a separator line.
 ///
@@ -9,19 +8,10 @@ use std::env;
 ///
 /// A separator string using the terminal width (capped at 80 chars)
 pub fn separator() -> String {
-    let width = env::var("COLUMNS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(80)
-        .min(80);
+    let (width, _) = terminal::size().unwrap_or((80, 24));
+    let width = width.min(80);
 
-    format!(
-        "{}\0{:\0>width$}{}\n",
-        colors::DIM,
-        "",
-        colors::RESET,
-        width = width
-    )
+    format!("{}\n", "─".repeat(width as usize).dim())
 }
 
 #[cfg(test)]

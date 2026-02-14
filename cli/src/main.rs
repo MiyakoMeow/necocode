@@ -4,12 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
+use crossterm::style::{Attribute, Stylize};
 use serde_json::json;
 use std::io::{self, Write};
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
-use necocode::{colors, separator};
+use necocode::separator;
 
 // 使用 core 库模块
 use necocode_core::{AnthropicConfig, Client, Config, CoreEvent};
@@ -34,11 +35,7 @@ async fn run_interactive_mode(
 
     loop {
         print!("{}", separator());
-        print!(
-            "{}❯{} ",
-            colors::BOLD.to_string() + colors::BLUE,
-            colors::RESET
-        );
+        print!("{} ", "❯".bold().blue());
         io::stdout().flush()?;
 
         let mut user_input = String::new();
@@ -59,7 +56,7 @@ async fn run_interactive_mode(
             "/q" | "exit" => break,
             "/c" => {
                 messages.clear();
-                println!("{}⏺ Cleared conversation{}", colors::GREEN, colors::RESET);
+                println!("{}", "⏺ Cleared conversation".green());
                 continue;
             }
             _ => {}
@@ -76,7 +73,7 @@ async fn run_interactive_mode(
             .run_agent_loop_stream(&mut messages, system_prompt, schema, Some(&event_sender))
             .await
         {
-            println!("{}⏺ Error: {}{}", colors::RED, e, colors::RESET);
+            println!("{} Error: {}", "⏺".red(), e);
         }
 
         println!();
@@ -118,40 +115,18 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                 io::stdout().flush().unwrap();
             }
             CoreEvent::ToolCallStart { id, name } => {
-                println!(
-                    "\n{}🔧{} {}{}{} (id: {})",
-                    colors::BOLD,
-                    colors::RESET,
-                    colors::YELLOW,
-                    name,
-                    colors::RESET,
-                    id
-                );
+                println!("\n🔧 {} (id: {})", name.yellow().bold(), id);
             }
             CoreEvent::ToolExecuting { name } => {
-                println!("{}⚙️{} {}执行中...", colors::BOLD, colors::RESET, name);
+                println!("{}⚙️ {}执行中...", Attribute::Bold, name);
             }
             CoreEvent::ToolResult { name, result } => {
-                println!(
-                    "\n{}📝{} {}{}{} 结果:",
-                    colors::BOLD,
-                    colors::RESET,
-                    colors::GREEN,
-                    name,
-                    colors::RESET
-                );
+                println!("\n📝 {} 结果:", name.green().bold());
                 println!("{}", result);
                 print!("{}", separator());
             }
             CoreEvent::Error(error) => {
-                println!(
-                    "\n{}❌{} {}错误: {}{}",
-                    colors::BOLD,
-                    colors::RESET,
-                    colors::RED,
-                    error,
-                    colors::RESET
-                );
+                println!("\n{} 错误: {}", "❌".red(), error);
                 print!("{}", separator());
             }
             CoreEvent::MessageStart => {
@@ -175,21 +150,12 @@ fn main() -> ExitCode {
 
     // 显示启动信息
     println!(
-        "{}necocode{} | {}{}{} | {}{}{} | {}{}{} | {}{}{}\n",
-        colors::BOLD,
-        colors::RESET,
-        colors::DIM,
-        anthropic_config.model,
-        colors::RESET,
-        colors::YELLOW,
-        anthropic_config.masked_api_key(),
-        colors::RESET,
-        colors::DIM,
-        anthropic_config.base_url,
-        colors::RESET,
-        colors::DIM,
-        config.cwd,
-        colors::RESET,
+        "{} | {} | {} | {} | {}\n",
+        "necocode".bold(),
+        anthropic_config.model.clone().dim(),
+        anthropic_config.masked_api_key().yellow(),
+        anthropic_config.base_url.clone().dim(),
+        config.cwd.clone().dim()
     );
 
     // 创建运行时
@@ -232,7 +198,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{}❌{} Error: {}", colors::RED, colors::RESET, e);
+            eprintln!("{} Error: {}", "❌".red(), e);
             ExitCode::FAILURE
         }
     }

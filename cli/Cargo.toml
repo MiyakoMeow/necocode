@@ -17,6 +17,7 @@ clap.workspace = true
 futures.workspace = true
 async-stream.workspace = true
 thiserror.workspace = true
+crossterm.workspace = true
 
 [[bin]]
 name = "necocode"

@@ -1,16 +1,18 @@
-//! ANSI color codes for terminal UI.
+//! Terminal styling utilities using crossterm.
+
+use crossterm::style::{Attribute, Color};
 
 /// 重置所有格式
-pub const RESET: &str = "\x1b[0m";
+pub const RESET: Attribute = Attribute::Reset;
 /// 粗体文本
-pub const BOLD: &str = "\x1b[1m";
+pub const BOLD: Attribute = Attribute::Bold;
 /// 暗淡文本
-pub const DIM: &str = "\x1b[2m";
+pub const DIM: Attribute = Attribute::Dim;
 /// 蓝色文本
-pub const BLUE: &str = "\x1b[34m";
+pub const BLUE: Color = Color::Blue;
 /// 绿色文本
-pub const GREEN: &str = "\x1b[32m";
+pub const GREEN: Color = Color::Green;
 /// 黄色文本
-pub const YELLOW: &str = "\x1b[33m";
+pub const YELLOW: Color = Color::Yellow;
 /// 红色文本
-pub const RED: &str = "\x1b[31m";
+pub const RED: Color = Color::Red;
