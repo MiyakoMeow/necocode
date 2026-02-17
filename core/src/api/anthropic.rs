@@ -2,14 +2,14 @@
 //!
 //! Handles API calls and the agentic loop for tool execution.
 
-pub mod schema;
 pub mod models;
+pub mod schema;
 
 use crate::events;
 use crate::tools;
-use models::{fetch_available_models, recommend_model, validate_model, ModelPreference};
 use anyhow::Result;
 use futures::stream::Stream;
+use models::{ModelPreference, fetch_available_models, recommend_model, validate_model};
 use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -144,7 +144,10 @@ impl AnthropicConfig {
                             model = "claude-opus-4-6".to_string();
                         }
                     } else if !validate_model(&model, &available_models) {
-                        eprintln!("⚠️  Warning: Model '{}' not found in available models", model);
+                        eprintln!(
+                            "⚠️  Warning: Model '{}' not found in available models",
+                            model
+                        );
                         if let Some(recommended) = recommend_model(&available_models, preference) {
                             eprintln!("💡 Recommended model: {}", recommended);
                             eprintln!("🔄 Switching to recommended model");

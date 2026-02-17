@@ -25,7 +25,9 @@ pub struct ModelInfo {
 struct ModelsListResponse {
     /// List of available models
     data: Vec<ModelInfo>,
-    /// Whether there are more results (for pagination)
+    /// Whether there are more results (for pagination).
+    ///
+    /// NOTE: Currently unused but kept for API compatibility and future use.
     #[allow(dead_code)]
     has_more: bool,
 }
@@ -74,7 +76,8 @@ pub async fn fetch_available_models(
 ) -> Result<Vec<ModelInfo>, ApiError> {
     // Check cache first
     if let Ok(cached) = load_cached_models()
-        && is_cache_valid(&cached) {
+        && is_cache_valid(&cached)
+    {
         return Ok(cached.models);
     }
 
@@ -168,7 +171,10 @@ fn get_cache_path() -> PathBuf {
     #[cfg(unix)]
     {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        PathBuf::from(home).join(".cache").join("necocode").join("models.json")
+        PathBuf::from(home)
+            .join(".cache")
+            .join("necocode")
+            .join("models.json")
     }
     #[cfg(windows)]
     {
@@ -249,14 +255,12 @@ mod tests {
 
     #[test]
     fn test_recommend_model_economy() {
-        let models = vec![
-            ModelInfo {
-                id: "claude-haiku-4-5".to_string(),
-                display_name: "Haiku".to_string(),
-                created_at: "2024-01-01".to_string(),
-                model_type: "model".to_string(),
-            },
-        ];
+        let models = vec![ModelInfo {
+            id: "claude-haiku-4-5".to_string(),
+            display_name: "Haiku".to_string(),
+            created_at: "2024-01-01".to_string(),
+            model_type: "model".to_string(),
+        }];
 
         let recommended = recommend_model(&models, Some(ModelPreference::Haiku));
         assert_eq!(recommended, Some("claude-haiku-4-5".to_string()));
@@ -298,14 +302,12 @@ mod tests {
 
     #[test]
     fn test_recommend_model_fallback() {
-        let models = vec![
-            ModelInfo {
-                id: "claude-opus-4-1".to_string(),
-                display_name: "Opus 4.1".to_string(),
-                created_at: "2024-08-05".to_string(),
-                model_type: "model".to_string(),
-            },
-        ];
+        let models = vec![ModelInfo {
+            id: "claude-opus-4-1".to_string(),
+            display_name: "Opus 4.1".to_string(),
+            created_at: "2024-08-05".to_string(),
+            model_type: "model".to_string(),
+        }];
 
         let recommended = recommend_model(&models, Some(ModelPreference::Opus));
         assert_eq!(recommended, Some("claude-opus-4-1".to_string()));

@@ -1,11 +1,9 @@
 //! nanocode - minimal Claude code alternative in Rust
 
-// TUI 应用程序，使用核心库中的功能
+// CLI 应用程序 - 只负责渲染和用户交互
 
-use anyhow::Result;
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
-use serde_json::json;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
@@ -14,7 +12,7 @@ use tokio::sync::mpsc;
 use necocode::separator;
 
 // 使用 core 库模块
-use necocode_core::{AnthropicConfig, Client, Config, CoreEvent};
+use necocode_core::{AnthropicConfig, Config, CoreEvent, Session, StdinInputReader};
 
 mod logging;
 
@@ -39,89 +37,7 @@ struct CliArgs {
     message: Option<String>,
 }
 
-/// 运行交互式模式 - 进入REPL循环，与AI进行实时对话
-async fn run_interactive_mode(
-    client: &Client,
-    system_prompt: &str,
-    schema: &[serde_json::Value],
-    event_sender: mpsc::UnboundedSender<CoreEvent>,
-) -> Result<()> {
-    let mut messages: Vec<serde_json::Value> = Vec::new();
-
-    loop {
-        print!("{}", separator());
-        print!("{} ", "❯".bold().blue());
-        io::stdout().flush()?;
-
-        let mut user_input = String::new();
-        let bytes_read = io::stdin().read_line(&mut user_input)?;
-        if bytes_read == 0 {
-            break; // EOF，正常退出
-        }
-        let user_input = user_input.trim();
-
-        print!("{}", separator());
-
-        if user_input.is_empty() {
-            continue;
-        }
-
-        // Handle commands
-        match user_input {
-            "/q" | "exit" => break,
-            "/c" => {
-                messages.clear();
-                println!("{}", "⏺ Cleared conversation".green());
-                continue;
-            }
-            _ => {}
-        }
-
-        // Add user message
-        messages.push(json!({
-            "role": "user",
-            "content": user_input,
-        }));
-
-        // Run agentic loop (streaming)
-        if let Err(e) = client
-            .run_agent_loop_stream(&mut messages, system_prompt, schema, Some(&event_sender))
-            .await
-        {
-            println!("{} Error: {}", "⏺".red(), e);
-        }
-
-        println!();
-    }
-
-    Ok(())
-}
-
-/// 运行单条消息模式 - 发送单次消息并获取AI响应
-async fn run_single_message_mode(
-    message: String,
-    client: &Client,
-    system_prompt: &str,
-    schema: &[serde_json::Value],
-    event_sender: mpsc::UnboundedSender<CoreEvent>,
-) -> Result<()> {
-    let mut messages = Vec::new();
-
-    // 添加用户消息
-    messages.push(json!({
-        "role": "user",
-        "content": message
-    }));
-
-    // 调用流式响应（支持工具调用）
-    client
-        .run_agent_loop_stream(&mut messages, system_prompt, schema, Some(&event_sender))
-        .await?;
-
-    Ok(())
-}
-
-/// 处理核心事件的异步任务
+/// 处理核心事件的异步任务（渲染逻辑）
 async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
     while let Some(event) = receiver.recv().await {
         match event {
@@ -144,8 +60,13 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                 print!("{}", separator());
             }
             CoreEvent::Error(error) => {
-                tracing::error!(error = %error, "Core error occurred");
-                println!("\n{} 错误: {}", "❌".red(), error);
+                // 特殊处理 "Conversation cleared" 消息
+                if error.contains("Conversation cleared") {
+                    println!("{}", "⏺ Cleared conversation".green());
+                } else {
+                    tracing::error!(error = %error, "Core error occurred");
+                    println!("\n{} 错误: {}", "❌".red(), error);
+                }
                 print!("{}", separator());
             }
             CoreEvent::MessageStart => {
@@ -154,6 +75,7 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
             }
             CoreEvent::MessageStop => {
                 tracing::debug!("Message stopped");
+                println!();
                 print!("{}", separator());
             }
         }
@@ -172,14 +94,17 @@ fn main() -> ExitCode {
     let _logging_enabled = setup_logging(&config);
 
     // 创建运行时
+    //
     // SAFETY: Runtime creation failure is unrecoverable and should terminate the program.
+    // We use expect() here because:
+    // 1. This is in main() - there's no caller to handle the error
+    // 2. Runtime creation failing is a fatal system error
+    // 3. The error message is clear and actionable
     #[allow(clippy::expect_used)]
     let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
     // 在运行时中加载 Anthropic 配置（支持异步模型验证和自动选择）
-    let anthropic_config = rt.block_on(async {
-        AnthropicConfig::from_env_with_validation().await
-    });
+    let anthropic_config = rt.block_on(async { AnthropicConfig::from_env_with_validation().await });
 
     // 显示启动信息
     println!(
@@ -194,14 +119,10 @@ fn main() -> ExitCode {
     // 创建事件通道
     let (event_sender, event_receiver) = mpsc::unbounded_channel();
 
-    // 创建 API 客户端
-    let client = Client::new(anthropic_config.clone());
+    // 创建 session
+    let mut session = Session::new(anthropic_config.clone(), config.cwd.clone());
 
-    // 准备系统提示和工具schema
-    let system_prompt = format!("Concise coding assistant. cwd: {}", config.cwd);
-    let schema = necocode_core::api::anthropic::schema::tool_schemas();
-
-    // 启动事件处理任务
+    // 启动事件处理任务（渲染）
     let handle = rt.spawn(async move {
         handle_core_events(event_receiver).await;
     });
@@ -210,10 +131,11 @@ fn main() -> ExitCode {
     let result = rt.block_on(async {
         if let Some(message) = args.message {
             // 非交互模式：执行单次对话
-            run_single_message_mode(message, &client, &system_prompt, &schema, event_sender).await
+            session.run_single(message, event_sender).await
         } else {
             // 交互模式：进入REPL
-            run_interactive_mode(&client, &system_prompt, &schema, event_sender).await
+            let reader = StdinInputReader;
+            session.run_interactive(reader, event_sender).await
         }
     });
 
