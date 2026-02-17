@@ -165,9 +165,21 @@ fn main() -> ExitCode {
     // 解析命令行参数
     let args = CliArgs::parse();
 
-    // 加载配置
+    // 加载基础配置
     let config = Config::from_env();
-    let anthropic_config = AnthropicConfig::from_env();
+
+    // 初始化日志系统
+    let _logging_enabled = setup_logging(&config);
+
+    // 创建运行时
+    // SAFETY: Runtime creation failure is unrecoverable and should terminate the program.
+    #[allow(clippy::expect_used)]
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+
+    // 在运行时中加载 Anthropic 配置（支持异步模型验证和自动选择）
+    let anthropic_config = rt.block_on(async {
+        AnthropicConfig::from_env_with_validation().await
+    });
 
     // 显示启动信息
     println!(
@@ -178,13 +190,6 @@ fn main() -> ExitCode {
         anthropic_config.base_url.clone().dim(),
         config.cwd.clone().dim()
     );
-
-    // 初始化日志系统
-    let _logging_enabled = setup_logging(&config);
-    // 创建运行时
-    // SAFETY: Runtime creation failure is unrecoverable and should terminate the program.
-    #[allow(clippy::expect_used)]
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
 
     // 创建事件通道
     let (event_sender, event_receiver) = mpsc::unbounded_channel();

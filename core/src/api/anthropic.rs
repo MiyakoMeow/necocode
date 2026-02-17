@@ -3,9 +3,11 @@
 //! Handles API calls and the agentic loop for tool execution.
 
 pub mod schema;
+pub mod models;
 
 use crate::events;
 use crate::tools;
+use models::{fetch_available_models, recommend_model, validate_model, ModelPreference};
 use anyhow::Result;
 use futures::stream::Stream;
 use reqwest::Client as HttpClient;
@@ -74,6 +76,98 @@ impl AnthropicConfig {
             "*".repeat(key.len())
         } else {
             "(no key)".to_string()
+        }
+    }
+
+    /// Load Anthropic configuration from environment variables with model validation.
+    ///
+    /// This method extends `from_env` by adding optional model validation and automatic
+    /// model recommendation when the model is not set or validation is enabled.
+    ///
+    /// # Environment Variables
+    ///
+    /// - `ANTHROPIC_BASE_URL`: Base URL for API (default: "https://api.anthropic.com")
+    /// - `ANTHROPIC_MODEL` or `MODEL`: Model to use
+    /// - `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`: API key
+    /// - `NEOCODE_VALIDATE_MODEL`: Enable model validation (default: false)
+    /// - `NEOCODE_MODEL_PREFERENCE`: Model preference - "performance", "balanced", or "economy"
+    ///
+    /// # Behavior
+    ///
+    /// 1. If model is not set OR `NEOCODE_VALIDATE_MODEL=true`:
+    ///    - Fetch available models from API
+    ///    - If model is empty, auto-recommend based on preference
+    ///    - If model is set but invalid, warn and recommend
+    ///    - If model is valid, confirm
+    /// 2. On network failure, silently use configured value (graceful degradation)
+    /// 3. Default preference: "performance" (recommends latest Opus)
+    ///
+    /// # Returns
+    ///
+    /// Returns the configuration with validated or recommended model.
+    pub async fn from_env_with_validation() -> Self {
+        use std::env;
+
+        let base_url = env::var("ANTHROPIC_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+
+        let api_key = env::var("ANTHROPIC_AUTH_TOKEN")
+            .or_else(|_| env::var("ANTHROPIC_API_KEY"))
+            .unwrap_or_default();
+
+        let should_validate = env::var("NEOCODE_VALIDATE_MODEL")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        let preference = match env::var("NEOCODE_MODEL_PREFERENCE").as_deref() {
+            Ok("opus") => Some(ModelPreference::Opus),
+            Ok("sonnet") => Some(ModelPreference::Sonnet),
+            Ok("haiku") => Some(ModelPreference::Haiku),
+            _ => None,
+        };
+
+        let mut model = env::var("ANTHROPIC_MODEL")
+            .or_else(|_| env::var("MODEL"))
+            .unwrap_or_default();
+
+        if model.is_empty() || should_validate {
+            let http_client = HttpClient::new();
+
+            match fetch_available_models(&http_client, &base_url, &api_key).await {
+                Ok(available_models) => {
+                    if model.is_empty() {
+                        if let Some(recommended) = recommend_model(&available_models, preference) {
+                            eprintln!("🤖 Auto-selected model: {}", recommended);
+                            model = recommended;
+                        } else {
+                            model = "claude-opus-4-6".to_string();
+                        }
+                    } else if !validate_model(&model, &available_models) {
+                        eprintln!("⚠️  Warning: Model '{}' not found in available models", model);
+                        if let Some(recommended) = recommend_model(&available_models, preference) {
+                            eprintln!("💡 Recommended model: {}", recommended);
+                            eprintln!("🔄 Switching to recommended model");
+                            model = recommended;
+                        }
+                    } else if should_validate {
+                        eprintln!("✓ Model validated: {}", model);
+                    }
+                }
+                Err(_) => {
+                    if model.is_empty() {
+                        model = "claude-opus-4-6".to_string();
+                    }
+                }
+            }
+        } else if model.is_empty() {
+            model = "claude-opus-4-6".to_string();
+        }
+
+        Self {
+            base_url,
+            model,
+            api_key,
         }
     }
 }
@@ -156,8 +250,7 @@ pub enum ContentBlock {
     #[serde(rename = "text")]
     Text {
         /// 文本内容
-        #[serde(default, rename = "text")]
-        _text: String,
+        text: String,
     },
     /// 工具调用内容块，描述需要执行的函数调用
     #[serde(rename = "tool_use")]
@@ -377,7 +470,7 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
     StreamEvent::ContentBlockStart {
                                             index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
                                             content_block: serde_json::from_value(block.clone())
-                                                .unwrap_or(ContentBlock::Text { _text: String::new() }),
+                                                .unwrap_or(ContentBlock::Text { text: String::new() }),
                                         }
                                             } else {
                                                 continue;
@@ -894,7 +987,7 @@ mod tests {
             }
         };
         match text {
-            ContentBlock::Text { _text: t } => assert_eq!(t, "Hello"),
+            ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
             ContentBlock::ToolUse { .. } => {
                 unreachable!("Expected Text variant but got ToolUse in test")
             }

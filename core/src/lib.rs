@@ -12,6 +12,9 @@ pub mod tools;
 // 从 api::anthropic 重新导出常用类型
 pub use api::anthropic::{AnthropicConfig, ApiError, Client};
 
+// 从 api::anthropic::models 重新导出常用类型
+pub use api::anthropic::models::{ModelInfo, ModelPreference};
+
 // 从 config 重新导出 Config 类型
 pub use config::Config;
 
