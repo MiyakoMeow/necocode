@@ -1,4 +1,4 @@
-//! CLI utilities for necocode.
+//! CLI utilities for neco.
 
 pub mod colors;
 pub mod separator;

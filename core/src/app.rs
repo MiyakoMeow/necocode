@@ -1,4 +1,4 @@
-//! Application layer for necocode.
+//! Application layer for neco.
 //!
 //! This module provides the main application abstraction that manages
 //! sessions, event channels, and the main execution loop.
@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 /// # Examples
 ///
 /// ```no_run
-/// use necocode_core::{App, AnthropicConfig, Config, StdinInputReader};
+/// use neco_core::{App, AnthropicConfig, Config, StdinInputReader};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let anthropic_config = AnthropicConfig::from_env();
@@ -358,29 +358,6 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::InputReader;
-
-    // Mock input reader for testing
-    struct MockInputReader {
-        lines: Vec<Option<String>>,
-    }
-
-    impl MockInputReader {
-        fn new(lines: Vec<Option<String>>) -> Self {
-            Self { lines }
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl InputReader for MockInputReader {
-        async fn read_line(&mut self) -> Option<String> {
-            if self.lines.is_empty() {
-                None
-            } else {
-                self.lines.remove(0)
-            }
-        }
-    }
 
     #[test]
     fn test_app_new() {

@@ -9,10 +9,10 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
-use necocode::separator;
+use neco::separator;
 
 // Use core library modules
-use necocode_core::{App, Config, CoreEvent};
+use neco_core::{App, Config, CoreEvent};
 
 mod logging;
 
@@ -100,7 +100,7 @@ fn main() -> ExitCode {
 
     println!(
         "{} | {} | {} | {}\n",
-        "necocode".bold(),
+        "neco".bold(),
         anthropic_config.model.clone().dim(),
         anthropic_config.masked_api_key().yellow(),
         anthropic_config.base_url.clone().dim()

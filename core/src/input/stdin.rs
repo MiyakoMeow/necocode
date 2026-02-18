@@ -43,8 +43,7 @@ mod tests {
 
     #[test]
     fn test_stdin_input_reader_default() {
-        let reader = StdinInputReader::default();
-        let _ = reader; // Suppress unused warning
+        let _ = StdinInputReader;
     }
 
     #[test]

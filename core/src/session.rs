@@ -64,7 +64,7 @@ impl Session {
     /// # Examples
     ///
     /// ```no_run
-    /// use necocode_core::{Session, StdinInputReader, AnthropicConfig};
+    /// use neco_core::{Session, StdinInputReader, AnthropicConfig};
     /// use tokio::sync::mpsc;
     ///
     /// # async fn example() -> anyhow::Result<()> {

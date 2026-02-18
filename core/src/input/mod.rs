@@ -21,7 +21,7 @@ pub trait InputReader {
     /// # Examples
     ///
     /// ```
-    /// use necocode_core::InputReader;
+    /// use neco_core::InputReader;
     ///
     /// # async fn test(mut reader: impl InputReader) {
     /// if let Some(line) = reader.read_line().await {
