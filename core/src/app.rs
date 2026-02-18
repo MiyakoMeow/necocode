@@ -135,13 +135,9 @@ impl App {
             let mut app = Self::new_internal(anthropic_config.clone(), config, event_sender);
 
             let handle = if let Some(msg) = message {
-                tokio::spawn(async move {
-                    app.run_single_async(msg).await
-                })
+                tokio::spawn(async move { app.run_single_async(msg).await })
             } else {
-                tokio::spawn(async move {
-                    app.run_interactive_with_input(input_receiver).await
-                })
+                tokio::spawn(async move { app.run_interactive_with_input(input_receiver).await })
             };
 
             Ok::<_, anyhow::Error>((event_receiver, handle, anthropic_config))

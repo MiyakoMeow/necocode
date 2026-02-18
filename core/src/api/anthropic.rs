@@ -181,157 +181,157 @@ impl Default for AnthropicConfig {
     }
 }
 
-/// API错误类型
+/// API error type
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ApiError {
-    /// 网络连接错误
+    /// Network connection error
     #[error("Network error: {0}")]
     NetworkError(String),
 
-    /// HTTP请求错误
+    /// HTTP request error
     #[error("HTTP error {status}: {message}")]
     HttpError {
-        /// HTTP状态码
+        /// HTTP status code
         status: u16,
-        /// 错误消息
+        /// Error message
         message: String,
     },
 
-    /// 数据解析错误
+    /// Data parsing error
     #[error("Parse error: {0}")]
     ParseError(String),
 
-    /// 流式响应错误
+    /// Stream response error
     #[error("Stream error: {0}")]
     StreamError(String),
 
-    /// API返回错误
+    /// API returned error
     #[error("API error: {0}")]
     Api(String),
 }
 
-/// 流式响应事件
+/// Stream response event
 #[derive(Debug, Clone)]
 pub enum StreamEvent {
-    /// 消息开始事件，表示流式响应的开始
+    /// Message start event, indicates the start of stream response
     MessageStart,
-    /// 内容块开始事件，包含内容块类型和索引
+    /// Content block start event, contains content block type and index
     ContentBlockStart {
-        /// 内容块在消息中的索引位置
+        /// Index position of the content block in the message
         index: u32,
-        /// 内容块的具体内容
+        /// Specific content of the content block
         content_block: ContentBlock,
     },
-    /// 内容块增量事件，包含增量数据
+    /// Content block delta event, contains delta data
     ContentBlockDelta {
-        /// 内容块在消息中的索引位置
+        /// Index position of the content block in the message
         index: u32,
-        /// 增量数据
+        /// Delta data
         delta: Delta,
     },
-    /// 内容块结束事件，表示某个内容块已完成
+    /// Content block stop event, indicates a content block is completed
     ContentBlockStop {
-        /// 内容块在消息中的索引位置
+        /// Index position of the content block in the message
         index: u32,
     },
-    /// 消息增量事件，包含消息级别的增量数据
+    /// Message delta event, contains message-level delta data
     MessageDelta,
-    /// 消息结束事件，表示流式响应的结束
+    /// Message stop event, indicates the end of stream response
     MessageStop,
-    /// 错误事件，包含API错误信息
+    /// Error event, contains API error information
     Error {
-        /// 错误详情
+        /// Error details
         error: ApiError,
     },
 }
 
-/// 内容块类型
+/// Content block type
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum ContentBlock {
-    /// 文本内容块，包含纯文本内容
+    /// Text content block, contains plain text content
     #[serde(rename = "text")]
     Text {
-        /// 文本内容
+        /// Text content
         text: String,
     },
-    /// 工具调用内容块，描述需要执行的函数调用
+    /// Tool call content block, describes the function call to be executed
     #[serde(rename = "tool_use")]
     ToolUse {
-        /// 工具调用的唯一标识符
+        /// Unique identifier for the tool call
         id: String,
-        /// 工具（函数）的名称
+        /// Name of the tool (function)
         name: String,
-        /// 工具调用的输入参数
+        /// Input parameters for the tool call
         input: Value,
     },
 }
 
-/// 增量数据
+/// Delta data
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum Delta {
-    /// 文本增量，包含新增的文本内容
+    /// Text delta, contains newly added text content
     #[serde(rename = "text_delta")]
     Text {
-        /// 增量的文本内容
+        /// Incremental text content
         text: String,
     },
-    /// JSON增量，包含JSON结构数据的增量部分
+    /// JSON delta, contains incremental part of JSON structure data
     #[serde(rename = "input_json_delta")]
     InputJson {
-        /// 部分的JSON数据，用于构建完整的JSON结构
+        /// Partial JSON data, used to build complete JSON structure
         partial_json: String,
     },
 }
 
-/// SSE事件流类型
+/// SSE event stream type
 pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent, ApiError>> + Send>>;
 
-/// 工具调用收集器
+/// Tool call collector
 pub struct ToolCallCollector {
-    /// 待处理的工具调用列表
+    /// List of pending tool calls
     calls: Vec<PendingToolCall>,
 }
 
-/// 待处理的工具调用
+/// Pending tool call
 #[derive(Debug, Clone)]
 struct PendingToolCall {
-    /// 工具调用的唯一标识符
+    /// Unique identifier for the tool call
     id: String,
-    /// 工具（函数）的名称
+    /// Name of the tool (function)
     name: String,
-    /// 工具输入参数的缓冲区，用于累积增量JSON数据
+    /// Buffer for tool input parameters, used to accumulate incremental JSON data
     input_buffer: String,
-    /// 是否已完成处理
+    /// Whether processing is completed
     completed: bool,
 }
 
-/// 完成的工具调用
+/// Completed tool call
 #[derive(Debug, Clone, Serialize)]
 pub struct ToolCall {
-    /// 工具调用的唯一标识符
+    /// Unique identifier for the tool call
     pub id: String,
-    /// 工具（函数）的名称
+    /// Name of the tool (function)
     pub name: String,
-    /// 工具调用的输入参数
+    /// Input parameters for the tool call
     pub input: Value,
 }
 
 impl ToolCallCollector {
-    /// 创建一个新的工具调用收集器
+    /// Create a new tool call collector
     pub fn new() -> Self {
         Self { calls: Vec::new() }
     }
 
-    /// 处理流式事件，收集工具调用
+    /// Process stream events, collect tool calls
     pub fn process_event(&mut self, event: &StreamEvent) {
         match event {
             StreamEvent::ContentBlockStart {
                 content_block: ContentBlock::ToolUse { id, name, input },
                 index,
             } => {
-                // 扩展 calls 向量以容纳新索引
+                // Extend calls vector to accommodate new index
                 while self.calls.len() <= *index as usize {
                     self.calls.push(PendingToolCall {
                         id: String::new(),
@@ -382,12 +382,12 @@ impl ToolCallCollector {
         }
     }
 
-    /// 检查是否有已完成的工具调用
+    /// Check if there are completed tool calls
     pub fn has_completed_calls(&self) -> bool {
         self.calls.iter().any(|c| c.completed)
     }
 
-    /// 提取所有已完成的工具调用并清空
+    /// Extract all completed tool calls and clear
     pub fn take_completed(&mut self) -> Vec<ToolCall> {
         let completed = self
             .calls
@@ -404,7 +404,7 @@ impl ToolCallCollector {
         completed
     }
 
-    /// 检查收集器是否处于活跃状态（有待处理的工具调用）
+    /// Check if the collector is active (has pending tool calls)
     pub fn is_active(&self) -> bool {
         !self.calls.is_empty()
     }
@@ -416,7 +416,7 @@ impl Default for ToolCallCollector {
     }
 }
 
-/// 解析SSE响应流
+/// Parse SSE response stream
 fn parse_sse_stream(response: reqwest::Response) -> EventStream {
     use futures::stream::StreamExt;
 
@@ -433,7 +433,7 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
                     }
                 };
 
-                // 将字节转换为字符串并处理
+                // Convert bytes to string and process
                 let chunk_str = match String::from_utf8(chunk.to_vec()) {
                     Ok(s) => s,
                     Err(e) => {
@@ -444,25 +444,25 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
 
                 buffer.push_str(&chunk_str);
 
-                // 按行分割
+                // Split by lines
                 while let Some(newline_pos) = buffer.find('\n') {
                     let line = buffer[..newline_pos].to_string();
                     buffer = buffer[newline_pos + 1..].to_string();
 
-                    // 跳过空行
+                    // Skip empty lines
                     if line.is_empty() {
                         continue;
                     }
 
-                    // SSE格式解析
+                    // SSE format parsing
                     if let Some(data) = line.strip_prefix("data: ") {
-                        // 跳过"[DONE]"标记
+                        // Skip "[DONE]" marker
                         if data == "[DONE]" {
                             yield Ok(StreamEvent::MessageStop);
                             continue;
                         }
 
-                        // 解析JSON
+                        // Parse JSON
                         match serde_json::from_str::<Value>(data) {
                             Ok(value) => {
                                 if let Some(event_type) = value.get("type").and_then(|v| v.as_str()) {
@@ -517,9 +517,9 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
 
 /// API client.
 pub struct Client {
-    /// HTTP客户端，用于发送API请求
+    /// HTTP client, used to send API requests
     http_client: HttpClient,
-    /// API配置，包含密钥、基础URL等信息
+    /// API configuration, contains key, base URL and other information
     config: AnthropicConfig,
 }
 
@@ -532,7 +532,7 @@ impl Client {
         }
     }
 
-    /// 发送流式消息请求
+    /// Send stream message request
     ///
     /// # Arguments
     ///
@@ -549,7 +549,7 @@ impl Client {
         system_prompt: &str,
         tools: Option<&[Value]>,
     ) -> Result<EventStream, ApiError> {
-        // 构建请求体
+        // Build request body
         let mut request_body = json!({
             "model": self.config.model,
             "max_tokens": 8192,
@@ -558,14 +558,14 @@ impl Client {
             "stream": true,
         });
 
-        // 添加工具（如果有）
+        // Add tools (if any)
         if let Some(tools_value) = tools
             && let Some(body_obj) = request_body.as_object_mut()
         {
             body_obj.insert("tools".to_string(), json!(tools_value));
         }
 
-        // 发送HTTP请求
+        // Send HTTP request
         let response = self
             .http_client
             .post(format!("{}/v1/messages", self.config.base_url))
@@ -577,7 +577,7 @@ impl Client {
             .await
             .map_err(|e| ApiError::NetworkError(e.to_string()))?;
 
-        // 检查状态码
+        // Check status code
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
@@ -587,7 +587,7 @@ impl Client {
             });
         }
 
-        // 返回解析后的SSE流
+        // Return parsed SSE stream
         Ok(parse_sse_stream(response))
     }
 
@@ -618,17 +618,17 @@ impl Client {
         let mut current_text = String::new();
 
         loop {
-            // 发送消息开始事件
+            // Send message start event
             if let Some(sender) = event_sender {
                 let _ = sender.send(events::CoreEvent::MessageStart);
             }
 
-            // 创建流式请求
+            // Create stream request
             let mut stream = self
                 .create_message_stream(messages, system_prompt, Some(tools))
                 .await?;
 
-            // 处理流式事件
+            // Process stream events
             while let Some(event_result) = stream.next().await {
                 let event = event_result?;
 
@@ -637,7 +637,7 @@ impl Client {
                         delta: Delta::Text { text },
                         ..
                     } => {
-                        // 发送文本增量事件
+                        // Send text delta event
                         if let Some(sender) = event_sender {
                             let _ = sender.send(events::CoreEvent::TextDelta(text.clone()));
                         }
@@ -648,7 +648,7 @@ impl Client {
                         content_block: ContentBlock::ToolUse { id, name, .. },
                         ..
                     } => {
-                        // 发送工具调用开始事件
+                        // Send tool call start event
                         if let Some(sender) = event_sender {
                             let _ = sender.send(events::CoreEvent::ToolCallStart {
                                 id: id.clone(),
@@ -658,14 +658,14 @@ impl Client {
                     }
 
                     StreamEvent::Error { error } => {
-                        // 发送错误事件
+                        // Send error event
                         if let Some(sender) = event_sender {
                             let _ = sender.send(events::CoreEvent::Error(error.to_string()));
                         }
                     }
 
                     StreamEvent::MessageStop => {
-                        // 发送消息停止事件
+                        // Send message stop event
                         if let Some(sender) = event_sender {
                             let _ = sender.send(events::CoreEvent::MessageStop);
                         }
@@ -681,11 +681,11 @@ impl Client {
                 tool_collector.process_event(&event);
             }
 
-            // 检查是否有已完成的工具调用
+            // Check if there are completed tool calls
             if tool_collector.has_completed_calls() {
                 let tool_calls = tool_collector.take_completed();
 
-                // 构建助手消息内容
+                // Build assistant message content
                 let mut content_blocks = vec![json!({
                     "type": "text",
                     "text": current_text
@@ -700,15 +700,15 @@ impl Client {
                     }));
                 }
 
-                // 保存助手消息
+                // Save assistant message
                 messages.push(json!({
                     "role": "assistant",
                     "content": content_blocks
                 }));
 
-                // 执行工具
+                // Execute tools
                 for call in tool_calls {
-                    // 发送工具执行开始事件
+                    // Send tool execution start event
                     if let Some(sender) = event_sender {
                         let _ = sender.send(events::CoreEvent::ToolExecuting {
                             name: call.name.clone(),
@@ -727,7 +727,7 @@ impl Client {
                         )
                         .await;
 
-                    // 发送工具结果事件
+                    // Send tool result event
                     if let Some(sender) = event_sender {
                         let _ = sender.send(events::CoreEvent::ToolResult {
                             name: call.name.clone(),
@@ -735,7 +735,7 @@ impl Client {
                         });
                     }
 
-                    // 添加工具结果到消息历史
+                    // Add tool result to message history
                     messages.push(json!({
                         "role": "user",
                         "content": [{
@@ -746,10 +746,10 @@ impl Client {
                     }));
                 }
 
-                // 清空当前文本并继续循环
+                // Clear current text and continue loop
                 current_text = String::new();
             } else if !current_text.is_empty() {
-                // 没有工具调用，保存最终回复并退出
+                // No tool calls, save final reply and exit
                 messages.push(json!({
                     "role": "assistant",
                     "content": [{
@@ -864,7 +864,7 @@ mod tests {
     fn test_tool_call_collector_basic() {
         let mut collector = ToolCallCollector::new();
 
-        // 模拟工具调用开始
+        // Simulate tool call start
         collector.process_event(&StreamEvent::ContentBlockStart {
             index: 0,
             content_block: ContentBlock::ToolUse {
@@ -874,7 +874,7 @@ mod tests {
             },
         });
 
-        // 模拟增量数据
+        // Simulate delta data
         collector.process_event(&StreamEvent::ContentBlockDelta {
             index: 0,
             delta: Delta::InputJson {
@@ -882,10 +882,10 @@ mod tests {
             },
         });
 
-        // 模拟结束
+        // Simulate end
         collector.process_event(&StreamEvent::ContentBlockStop { index: 0 });
 
-        // 验证收集
+        // Verify collection
         assert!(collector.has_completed_calls());
         let calls = collector.take_completed();
         assert_eq!(calls.len(), 1);
@@ -900,7 +900,7 @@ mod tests {
     fn test_tool_call_collector_multiple() {
         let mut collector = ToolCallCollector::new();
 
-        // 模拟第一个工具调用
+        // Simulate first tool call
         collector.process_event(&StreamEvent::ContentBlockStart {
             index: 0,
             content_block: ContentBlock::ToolUse {
@@ -919,7 +919,7 @@ mod tests {
 
         collector.process_event(&StreamEvent::ContentBlockStop { index: 0 });
 
-        // 模拟第二个工具调用
+        // Simulate second tool call
         collector.process_event(&StreamEvent::ContentBlockStart {
             index: 1,
             content_block: ContentBlock::ToolUse {
@@ -938,7 +938,7 @@ mod tests {
 
         collector.process_event(&StreamEvent::ContentBlockStop { index: 1 });
 
-        // 验证收集
+        // Verify collection
         assert!(collector.has_completed_calls());
         let calls = collector.take_completed();
         assert_eq!(calls.len(), 2);
@@ -957,7 +957,7 @@ mod tests {
     fn test_tool_call_collector_incomplete() {
         let mut collector = ToolCallCollector::new();
 
-        // 模拟工具调用开始但没有结束
+        // Simulate tool call start but without end
         collector.process_event(&StreamEvent::ContentBlockStart {
             index: 0,
             content_block: ContentBlock::ToolUse {
@@ -974,7 +974,7 @@ mod tests {
             },
         });
 
-        // 验证未完成
+        // Verify incomplete
         assert!(!collector.has_completed_calls());
         assert!(collector.is_active());
     }

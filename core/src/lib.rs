@@ -1,8 +1,8 @@
-//! Nyan-code 核心库
+//! Nyan-code core library
 //!
-//! 提供纯业务逻辑，包括 API 客户端、配置管理、工具函数和事件类型。
+//! Provides pure business logic, including API client, configuration management, tool functions, and event types.
 //!
-//! 这个库作为整个应用的入口点，重新导出了所有主要的公共类型和模块。
+//! This library serves as the entry point for the entire application, re-exporting all major public types and modules.
 
 pub mod api;
 pub mod app;
@@ -13,26 +13,26 @@ pub mod input;
 pub mod session;
 pub mod tools;
 
-// 从 api::anthropic 重新导出常用类型
+// Re-export common types from api::anthropic
 pub use api::anthropic::{AnthropicConfig, ApiError, Client};
 
-// 从 api::anthropic::models 重新导出常用类型
+// Re-export common types from api::anthropic::models
 pub use api::anthropic::models::{ModelInfo, ModelPreference};
 
-// 从 config 重新导出 Config 类型
+// Re-export Config type from config
 pub use config::Config;
 
-// 从 events 重新导出 CoreEvent 类型
+// Re-export CoreEvent type from events
 pub use events::CoreEvent;
 
-// 从 command 重新导出 UserCommand 类型
+// Re-export UserCommand type from command
 pub use command::UserCommand;
 
-// 从 input 重新导出输入类型
+// Re-export input types from input
 pub use input::{InputReader, StdinInputReader};
 
-// 从 session 重新导出 Session 类型
+// Re-export Session type from session
 pub use session::Session;
 
-// 从 app 重新导出 App 类型
+// Re-export App type from app
 pub use app::App;

@@ -2,17 +2,17 @@
 
 use crossterm::style::{Attribute, Color};
 
-/// 重置所有格式
+/// Reset all formatting
 pub const RESET: Attribute = Attribute::Reset;
-/// 粗体文本
+/// Bold text
 pub const BOLD: Attribute = Attribute::Bold;
-/// 暗淡文本
+/// Dim text
 pub const DIM: Attribute = Attribute::Dim;
-/// 蓝色文本
+/// Blue text
 pub const BLUE: Color = Color::Blue;
-/// 绿色文本
+/// Green text
 pub const GREEN: Color = Color::Green;
-/// 黄色文本
+/// Yellow text
 pub const YELLOW: Color = Color::Yellow;
-/// 红色文本
+/// Red text
 pub const RED: Color = Color::Red;

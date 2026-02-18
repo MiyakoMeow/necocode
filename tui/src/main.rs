@@ -1,22 +1,22 @@
 //! nanocode - minimal Claude code alternative in Rust
 
-// CLI 应用程序 - 只负责渲染和用户交互
+// CLI application - only responsible for rendering and user interaction
 
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
-use std::io::{self, Write, BufRead};
+use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
 use necocode::separator;
 
-// 使用 core 库模块
+// Use core library modules
 use necocode_core::{App, Config, CoreEvent};
 
 mod logging;
 
-/// 初始化日志系统，返回是否成功
+/// Initialize the logging system, returns success status
 fn setup_logging(config: &Config) -> bool {
     let log_dir = Path::new(&config.cwd).join("logs");
     match logging::init_logging(&log_dir) {
@@ -28,16 +28,16 @@ fn setup_logging(config: &Config) -> bool {
     }
 }
 
-/// AI编程助手 - Claude Code Rust实现
+/// AI programming assistant - Claude Code Rust implementation
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {
-    /// 直接发送消息并执行（非交互模式）
+    /// Send message directly and execute (non-interactive mode)
     #[arg(short = 'm', long = "message")]
     message: Option<String>,
 }
 
-/// 处理核心事件的异步任务（渲染逻辑）
+/// Async task to handle core events (rendering logic)
 async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
     while let Some(event) = receiver.recv().await {
         match event {
@@ -51,11 +51,11 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
             }
             CoreEvent::ToolExecuting { name } => {
                 tracing::info!(tool = %name, "Tool executing");
-                println!("{}⚙️ {}执行中...", Attribute::Bold, name);
+                println!("{}⚙️ {} executing...", Attribute::Bold, name);
             }
             CoreEvent::ToolResult { name, result } => {
                 tracing::debug!(tool = %name, result_len = result.len(), "Tool result received");
-                println!("\n📝 {} 结果:", name.green().bold());
+                println!("\n📝 {} Result:", name.green().bold());
                 println!("{}", result);
                 print!("{}", separator());
             }
@@ -64,7 +64,7 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                     println!("{}", "⏺ Cleared conversation".green());
                 } else {
                     tracing::error!(error = %error, "Core error occurred");
-                    println!("\n{} 错误: {}", "❌".red(), error);
+                    println!("\n{} Error: {}", "❌".red(), error);
                 }
                 print!("{}", separator());
             }
@@ -89,13 +89,14 @@ fn main() -> ExitCode {
 
     let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-    let (event_receiver, main_handle, anthropic_config) = match App::run(config, input_receiver, args.message.clone()) {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("{} Failed to start: {}", "❌".red(), e);
-            return ExitCode::FAILURE;
-        }
-    };
+    let (event_receiver, main_handle, anthropic_config) =
+        match App::run(config, input_receiver, args.message.clone()) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("{} Failed to start: {}", "❌".red(), e);
+                return ExitCode::FAILURE;
+            }
+        };
 
     println!(
         "{} | {} | {} | {}\n",

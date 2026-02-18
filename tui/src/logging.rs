@@ -21,16 +21,16 @@ use tracing_subscriber::{Registry, fmt, prelude::*};
 /// - Log directory cannot be created
 /// - Subscriber cannot be set as global default
 pub fn init_logging(log_dir: &Path) -> Result<()> {
-    // 创建日志文件目录
+    // Create log file directory
     std::fs::create_dir_all(log_dir)?;
 
-    // 配置文件appender（每天轮转）
+    // Configure file appender (daily rotation)
     let file_appender = rolling::daily(log_dir, "necocode.log");
 
-    // 创建非阻塞writer
+    // Create non-blocking writer
     let (non_blocking_file, _guard) = non_blocking(file_appender);
 
-    // 配置subscriber
+    // Configure subscriber
     let subscriber = Registry::default()
         .with(
             fmt::layer()
