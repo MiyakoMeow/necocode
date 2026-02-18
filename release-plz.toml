@@ -61,11 +61,11 @@ git_release_body = """
 
 ---
 
-📦 **Crates.io**: This version has been published to [crates.io](https://crates.io/crates/bms-table).
+📦 **Crates.io**: This version has been published to [crates.io](https://crates.io/crates/neco).
 """
 
 [[package]]
-name = "bms-table"
+name = "neco"
 changelog_path = "./CHANGELOG.md"
 
 [changelog]
@@ -114,5 +114,5 @@ commit_parsers = [
 ]
 
 commit_preprocessors = [
-  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/MiyakoMeow/bms-table-rs/pull/${1}))" },
+  { pattern = "\\(#([0-9]+)\\)", replace = "([#${1}](https://github.com/MiyakoMeow/necocode/pull/${1}))" },
 ]
