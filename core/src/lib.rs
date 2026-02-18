@@ -5,6 +5,7 @@
 //! 这个库作为整个应用的入口点，重新导出了所有主要的公共类型和模块。
 
 pub mod api;
+pub mod app;
 pub mod command;
 pub mod config;
 pub mod events;
@@ -32,3 +33,6 @@ pub use input::{InputReader, StdinInputReader};
 
 // 从 session 重新导出 Session 类型
 pub use session::Session;
+
+// 从 app 重新导出 App 类型
+pub use app::App;

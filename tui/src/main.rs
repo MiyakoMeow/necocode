@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use necocode::separator;
 
 // 使用 core 库模块
-use necocode_core::{AnthropicConfig, Config, CoreEvent, Session, StdinInputReader};
+use necocode_core::{AnthropicConfig, App, Config, CoreEvent, StdinInputReader};
 
 mod logging;
 
@@ -116,28 +116,32 @@ fn main() -> ExitCode {
         config.cwd.clone().dim()
     );
 
-    // 创建事件通道
-    let (event_sender, event_receiver) = mpsc::unbounded_channel();
+    // 创建应用实例（App内部管理Session和事件通道）
+    let mut app = match App::new(anthropic_config, config) {
+        Ok(app) => app,
+        Err(e) => {
+            eprintln!("{} Failed to create app: {}", "❌".red(), e);
+            return ExitCode::FAILURE;
+        }
+    };
 
-    // 创建 session
-    let mut session = Session::new(anthropic_config.clone(), config.cwd.clone());
+    // 获取事件接收器用于渲染
+    let event_receiver = app.take_event_receiver();
 
     // 启动事件处理任务（渲染）
     let handle = rt.spawn(async move {
         handle_core_events(event_receiver).await;
     });
 
-    // 根据参数选择运行模式
-    let result = rt.block_on(async {
-        if let Some(message) = args.message {
-            // 非交互模式：执行单次对话
-            session.run_single(message, event_sender).await
-        } else {
-            // 交互模式：进入REPL
-            let reader = StdinInputReader;
-            session.run_interactive(reader, event_sender).await
-        }
-    });
+    // 根据参数选择运行模式（App内部管理runtime和主循环）
+    let result = if let Some(message) = args.message {
+        // 非交互模式：执行单次对话
+        app.run_single(message)
+    } else {
+        // 交互模式：进入REPL
+        let reader = StdinInputReader;
+        app.run_interactive(reader)
+    };
 
     // 等待事件处理任务完成
     rt.block_on(async {
