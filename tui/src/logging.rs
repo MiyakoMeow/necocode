@@ -1,4 +1,4 @@
-//! Logging initialization and configuration for necocode.
+//! Logging initialization and configuration for neco.
 
 use anyhow::Result;
 use std::path::Path;
@@ -25,7 +25,7 @@ pub fn init_logging(log_dir: &Path) -> Result<()> {
     std::fs::create_dir_all(log_dir)?;
 
     // Configure file appender (daily rotation)
-    let file_appender = rolling::daily(log_dir, "necocode.log");
+    let file_appender = rolling::daily(log_dir, "neco.log");
 
     // Create non-blocking writer
     let (non_blocking_file, _guard) = non_blocking(file_appender);

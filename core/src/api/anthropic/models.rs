@@ -173,7 +173,7 @@ fn get_cache_path() -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         PathBuf::from(home)
             .join(".cache")
-            .join("necocode")
+            .join("neco")
             .join("models.json")
     }
     #[cfg(windows)]
@@ -183,12 +183,12 @@ fn get_cache_path() -> PathBuf {
             .unwrap_or_else(|_| ".".to_string());
         PathBuf::from(home)
             .join(".cache")
-            .join("necocode")
+            .join("neco")
             .join("models.json")
     }
     #[cfg(not(any(unix, windows)))]
     {
-        PathBuf::from(".cache").join("necocode").join("models.json")
+        PathBuf::from(".cache").join("neco").join("models.json")
     }
 }
 
