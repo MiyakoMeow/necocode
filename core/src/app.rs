@@ -3,12 +3,14 @@
 //! This module provides the main application abstraction that manages
 //! sessions, event channels, and the main execution loop.
 
+use crate::command::UserCommand;
 use crate::events::CoreEvent;
 use crate::input::InputReader;
 use crate::session::Session;
 use crate::{AnthropicConfig, Config};
 use anyhow::Result;
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 /// Main application structure that manages the entire lifecycle.
 ///
@@ -67,6 +69,85 @@ impl App {
             event_receiver: Some(event_receiver),
             config,
         })
+    }
+
+    /// Internal constructor that uses existing event channels.
+    ///
+    /// # Arguments
+    ///
+    /// * `anthropic_config` - Anthropic API configuration
+    /// * `config` - Application configuration
+    /// * `event_sender` - Pre-created event sender
+    ///
+    /// # Returns
+    ///
+    /// Returns a new App instance.
+    #[must_use]
+    fn new_internal(
+        anthropic_config: AnthropicConfig,
+        config: Config,
+        event_sender: mpsc::UnboundedSender<CoreEvent>,
+    ) -> Self {
+        let session = Session::new(anthropic_config, config.cwd.clone());
+
+        Self {
+            session,
+            event_sender,
+            event_receiver: None,
+            config,
+        }
+    }
+
+    /// Unified entry point for the application.
+    ///
+    /// This method creates the runtime, loads configuration, and starts the main loop.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Application configuration
+    /// * `input_receiver` - Channel for receiving user input
+    /// * `message` - Optional single message to process (non-interactive mode)
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing:
+    /// - The event receiver for rendering
+    /// - The main loop handle
+    /// - The loaded Anthropic config for display
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if runtime creation fails or initialization fails.
+    pub fn run(
+        config: Config,
+        input_receiver: mpsc::UnboundedReceiver<String>,
+        message: Option<String>,
+    ) -> Result<(
+        mpsc::UnboundedReceiver<CoreEvent>,
+        JoinHandle<Result<()>>,
+        AnthropicConfig,
+    )> {
+        let rt = tokio::runtime::Runtime::new()?;
+
+        let (event_receiver, handle, anthropic_config) = rt.block_on(async move {
+            let anthropic_config = AnthropicConfig::from_env_with_validation().await;
+            let (event_sender, event_receiver) = mpsc::unbounded_channel();
+            let mut app = Self::new_internal(anthropic_config.clone(), config, event_sender);
+
+            let handle = if let Some(msg) = message {
+                tokio::spawn(async move {
+                    app.run_single_async(msg).await
+                })
+            } else {
+                tokio::spawn(async move {
+                    app.run_interactive_with_input(input_receiver).await
+                })
+            };
+
+            Ok::<_, anyhow::Error>((event_receiver, handle, anthropic_config))
+        })?;
+
+        Ok((event_receiver, handle, anthropic_config))
     }
 
     /// Take the event receiver for rendering.
@@ -171,6 +252,88 @@ impl App {
         self.session
             .run_single(message, self.event_sender.clone())
             .await
+    }
+
+    /// Run interactive mode with input from a channel.
+    ///
+    /// This method reads user input from the provided channel and processes commands.
+    ///
+    /// # Arguments
+    ///
+    /// * `input_receiver` - Channel for receiving user input
+    ///
+    /// # Returns
+    ///
+    /// Returns Ok(()) on successful exit, Err on error.
+    pub async fn run_interactive_with_input(
+        &mut self,
+        mut input_receiver: mpsc::UnboundedReceiver<String>,
+    ) -> Result<()> {
+        loop {
+            let Some(user_input) = input_receiver.recv().await else {
+                break;
+            };
+
+            let user_input = user_input.trim();
+            if user_input.is_empty() {
+                continue;
+            }
+
+            let command = Self::parse_input(user_input);
+            let should_continue = self.handle_command(command).await?;
+            if !should_continue {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Parse user input into a command.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw user input string
+    ///
+    /// # Returns
+    /// Parsed command
+    #[must_use]
+    fn parse_input(input: &str) -> UserCommand {
+        match input {
+            "/q" | "exit" => UserCommand::Quit,
+            "/c" => UserCommand::Clear,
+            msg => UserCommand::Message(msg.to_string()),
+        }
+    }
+
+    /// Handle a user command.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to handle
+    ///
+    /// # Returns
+    ///
+    /// Ok(true) to continue the loop, Ok(false) to exit, Err on error
+    async fn handle_command(&mut self, command: UserCommand) -> Result<bool> {
+        match command {
+            UserCommand::Quit => Ok(false),
+            UserCommand::Clear => {
+                self.session.clear_history();
+                let _ = self
+                    .event_sender
+                    .send(CoreEvent::Error("Conversation cleared".to_string()));
+                Ok(true)
+            }
+            UserCommand::Message(_msg) => {
+                if let Err(e) = self.session.run_agent_loop(&self.event_sender).await {
+                    let _ = self
+                        .event_sender
+                        .send(CoreEvent::Error(format!("Error: {}", e)));
+                }
+                Ok(true)
+            }
+        }
     }
 
     /// Get reference to the internal session.

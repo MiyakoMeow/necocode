@@ -4,7 +4,7 @@
 
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
-use std::io::{self, Write};
+use std::io::{self, Write, BufRead};
 use std::path::Path;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use necocode::separator;
 
 // 使用 core 库模块
-use necocode_core::{AnthropicConfig, App, Config, CoreEvent, StdinInputReader};
+use necocode_core::{App, Config, CoreEvent};
 
 mod logging;
 
@@ -60,7 +60,6 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                 print!("{}", separator());
             }
             CoreEvent::Error(error) => {
-                // 特殊处理 "Conversation cleared" 消息
                 if error.contains("Conversation cleared") {
                     println!("{}", "⏺ Cleared conversation".green());
                 } else {
@@ -84,72 +83,51 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
 }
 
 fn main() -> ExitCode {
-    // 解析命令行参数
     let args = CliArgs::parse();
-
-    // 加载基础配置
     let config = Config::from_env();
-
-    // 初始化日志系统
     let _logging_enabled = setup_logging(&config);
 
-    // 创建运行时
-    //
-    // SAFETY: Runtime creation failure is unrecoverable and should terminate the program.
-    // We use expect() here because:
-    // 1. This is in main() - there's no caller to handle the error
-    // 2. Runtime creation failing is a fatal system error
-    // 3. The error message is clear and actionable
-    #[allow(clippy::expect_used)]
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+    let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-    // 在运行时中加载 Anthropic 配置（支持异步模型验证和自动选择）
-    let anthropic_config = rt.block_on(async { AnthropicConfig::from_env_with_validation().await });
-
-    // 显示启动信息
-    println!(
-        "{} | {} | {} | {} | {}\n",
-        "necocode".bold(),
-        anthropic_config.model.clone().dim(),
-        anthropic_config.masked_api_key().yellow(),
-        anthropic_config.base_url.clone().dim(),
-        config.cwd.clone().dim()
-    );
-
-    // 创建应用实例（App内部管理Session和事件通道）
-    let mut app = match App::new(anthropic_config, config) {
-        Ok(app) => app,
+    let (event_receiver, main_handle, anthropic_config) = match App::run(config, input_receiver, args.message.clone()) {
+        Ok(result) => result,
         Err(e) => {
-            eprintln!("{} Failed to create app: {}", "❌".red(), e);
+            eprintln!("{} Failed to start: {}", "❌".red(), e);
             return ExitCode::FAILURE;
         }
     };
 
-    // 获取事件接收器用于渲染
-    let event_receiver = app.take_event_receiver();
+    println!(
+        "{} | {} | {} | {}\n",
+        "necocode".bold(),
+        anthropic_config.model.clone().dim(),
+        anthropic_config.masked_api_key().yellow(),
+        anthropic_config.base_url.clone().dim()
+    );
 
-    // 启动事件处理任务（渲染）
-    let handle = rt.spawn(async move {
+    let event_rt = tokio::runtime::Runtime::new().expect("Failed to create event runtime");
+    let render_handle = event_rt.spawn(async move {
         handle_core_events(event_receiver).await;
     });
 
-    // 根据参数选择运行模式（App内部管理runtime和主循环）
-    let result = if let Some(message) = args.message {
-        // 非交互模式：执行单次对话
-        app.run_single(message)
-    } else {
-        // 交互模式：进入REPL
-        let reader = StdinInputReader;
-        app.run_interactive(reader)
-    };
+    if args.message.is_none() {
+        let stdin = io::stdin();
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(input) => {
+                    if input_sender.send(input).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    }
 
-    // 等待事件处理任务完成
-    rt.block_on(async {
-        handle.await.unwrap();
-    });
-
-    // 处理结果并返回退出码
-    match result {
+    match event_rt.block_on(async {
+        let _ = render_handle.await;
+        main_handle.await.unwrap()
+    }) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("{} Error: {}", "❌".red(), e);

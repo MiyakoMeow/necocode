@@ -133,6 +133,60 @@ impl Session {
         self.messages.clear();
     }
 
+    /// Get reference to the API client.
+    #[must_use]
+    pub const fn client(&self) -> &Client {
+        &self.client
+    }
+
+    /// Get reference to the messages history.
+    #[must_use]
+    pub fn messages(&self) -> &[serde_json::Value] {
+        &self.messages
+    }
+
+    /// Get mutable reference to the messages history.
+    #[must_use]
+    pub fn messages_mut(&mut self) -> &mut Vec<serde_json::Value> {
+        &mut self.messages
+    }
+
+    /// Get reference to the system prompt.
+    #[must_use]
+    pub fn system_prompt(&self) -> &str {
+        &self.system_prompt
+    }
+
+    /// Get reference to the tool schemas.
+    #[must_use]
+    pub fn schema(&self) -> &[serde_json::Value] {
+        &self.schema
+    }
+
+    /// Run the agent loop with the current session state.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_sender` - Sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on success, Err on error
+    pub async fn run_agent_loop(
+        &mut self,
+        event_sender: &mpsc::UnboundedSender<CoreEvent>,
+    ) -> Result<()> {
+        self.client
+            .run_agent_loop_stream(
+                &mut self.messages,
+                &self.system_prompt,
+                &self.schema,
+                Some(event_sender),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Agent loop error: {}", e))
+    }
+
     /// Parse user input into a command.
     ///
     /// # Arguments
