@@ -94,22 +94,6 @@ impl ProviderConfig {
         let mut config = provider.load_config();
         config.model = model.to_string();
 
-        let should_validate = std::env::var("NEOCODE_VALIDATE_MODEL")
-            .ok()
-            .and_then(|v| v.parse::<bool>().ok())
-            .unwrap_or(false);
-
-        let preference = match std::env::var("NEOCODE_MODEL_PREFERENCE").as_deref() {
-            Ok("opus") => Some(ModelPreference::Opus),
-            Ok("sonnet") => Some(ModelPreference::Sonnet),
-            Ok("haiku") => Some(ModelPreference::Haiku),
-            _ => None,
-        };
-
-        config.model = provider
-            .validate_and_recommend_model(&config.model, should_validate, preference)
-            .await;
-
         Ok(config)
     }
 
@@ -120,31 +104,13 @@ impl ProviderConfig {
     ///
     /// # Returns
     ///
-    /// The provider configuration with model validation if enabled.
-    pub async fn from_env_with_validation() -> Self {
+    /// The provider configuration.
+    pub async fn from_env() -> Self {
         let registry = ProviderRegistry::global().read().await;
         let provider = registry.detect_provider().await;
         drop(registry);
 
-        let should_validate = std::env::var("NEOCODE_VALIDATE_MODEL")
-            .ok()
-            .and_then(|v| v.parse::<bool>().ok())
-            .unwrap_or(false);
-
-        let preference = match std::env::var("NEOCODE_MODEL_PREFERENCE").as_deref() {
-            Ok("opus") => Some(ModelPreference::Opus),
-            Ok("sonnet") => Some(ModelPreference::Sonnet),
-            Ok("haiku") => Some(ModelPreference::Haiku),
-            _ => None,
-        };
-
-        let mut config = provider.load_config();
-
-        config.model = provider
-            .validate_and_recommend_model(&config.model, should_validate, preference)
-            .await;
-
-        config
+        provider.load_config()
     }
 }
 
