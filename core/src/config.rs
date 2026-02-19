@@ -32,23 +32,9 @@ impl AppConfig {
         providers.insert(
             "anthropic".to_string(),
             ProviderConfigFile {
-                display_name: Some("Anthropic".to_string()),
                 base_url: Some("https://api.anthropic.com".to_string()),
                 api_key_env: "ANTHROPIC_AUTH_TOKEN".to_string(),
                 api_key_env_fallback: Some("ANTHROPIC_API_KEY".to_string()),
-                default_model: Some("claude-opus-4-5".to_string()),
-                model_env: Some("ANTHROPIC_MODEL".to_string()),
-                base_url_env: Some("ANTHROPIC_BASE_URL".to_string()),
-            },
-        );
-
-        providers.insert(
-            "zhipuai".to_string(),
-            ProviderConfigFile {
-                display_name: Some("ZhipuAI (智谱AI)".to_string()),
-                base_url: Some("https://open.bigmodel.cn/api/anthropic".to_string()),
-                api_key_env: "ZHIPU_API_KEY".to_string(),
-                api_key_env_fallback: None,
                 default_model: Some("claude-opus-4-5".to_string()),
                 model_env: Some("ANTHROPIC_MODEL".to_string()),
                 base_url_env: Some("ANTHROPIC_BASE_URL".to_string()),
@@ -113,8 +99,6 @@ pub struct GeneralConfig {
 /// Provider configuration loaded from file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProviderConfigFile {
-    /// Provider display name
-    pub display_name: Option<String>,
     /// API base URL
     pub base_url: Option<String>,
     /// API key environment variable name (required)
@@ -169,7 +153,6 @@ mod tests {
     fn test_app_config_default() {
         let config = AppConfig::default();
         assert!(config.model_providers.contains_key("anthropic"));
-        assert!(config.model_providers.contains_key("zhipuai"));
     }
 
     #[test]
@@ -188,21 +171,6 @@ mod tests {
         assert_eq!(
             provider.base_url,
             Some("https://api.anthropic.com".to_string())
-        );
-    }
-
-    #[test]
-    fn test_provider_config_file_zhipuai() {
-        let provider = AppConfig::default()
-            .model_providers
-            .get("zhipuai")
-            .cloned()
-            .unwrap();
-
-        assert_eq!(provider.api_key_env, "ZHIPU_API_KEY");
-        assert_eq!(
-            provider.base_url,
-            Some("https://open.bigmodel.cn/api/anthropic".to_string())
         );
     }
 

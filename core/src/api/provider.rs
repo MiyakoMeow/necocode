@@ -148,9 +148,7 @@ impl Provider for ConfigFileProvider {
     }
 
     fn display_name(&self) -> &str {
-        self.config
-            .display_name.as_deref()
-            .unwrap_or(self.name.as_str())
+        self.name.as_str()
     }
 
     fn is_available(&self) -> bool {
@@ -346,7 +344,6 @@ mod tests {
         let provider = Arc::new(ConfigFileProvider::new(
             "test".to_string(),
             ProviderConfigFile {
-                display_name: Some("Test Provider".to_string()),
                 base_url: Some("https://api.test.com".to_string()),
                 api_key_env: "TEST_API_KEY".to_string(),
                 api_key_env_fallback: None,
@@ -401,6 +398,5 @@ mod tests {
     fn test_app_config_load() {
         let config = AppConfig::load();
         assert!(config.model_providers.contains_key("anthropic"));
-        assert!(config.model_providers.contains_key("zhipuai"));
     }
 }
