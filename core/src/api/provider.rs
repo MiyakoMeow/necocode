@@ -152,39 +152,33 @@ impl Provider for ConfigFileProvider {
     }
 
     fn is_available(&self) -> bool {
-        std::env::var(&self.config.api_key_env).is_ok()
+        self.config.api_key.is_some()
             || self
                 .config
-                .api_key_env_fallback
+                .api_key_env
                 .as_ref()
-                .is_some_and(|f| std::env::var(f).is_ok())
+                .is_some_and(|env| std::env::var(env).is_ok())
     }
 
     fn load_config(&self) -> ProviderConfig {
-        let api_key = std::env::var(&self.config.api_key_env)
-            .ok()
-            .or_else(|| {
-                self.config
-                    .api_key_env_fallback
-                    .as_ref()
-                    .and_then(|f| std::env::var(f).ok())
-            })
+        let api_key = self
+            .config
+            .api_key_env
+            .as_ref()
+            .and_then(|env| std::env::var(env).ok())
+            .or_else(|| self.config.api_key.clone())
             .unwrap_or_default();
 
         let base_url = self
             .config
-            .base_url_env
-            .as_ref()
-            .and_then(|env| std::env::var(env).ok())
-            .or_else(|| self.config.base_url.clone())
+            .base_url
+            .clone()
             .unwrap_or_else(|| "https://api.anthropic.com".to_string());
 
         let model = self
             .config
-            .model_env
-            .as_ref()
-            .and_then(|env| std::env::var(env).ok())
-            .or_else(|| self.config.default_model.clone())
+            .default_model
+            .clone()
             .unwrap_or_else(|| "claude-opus-4-5".to_string());
 
         ProviderConfig {
@@ -345,11 +339,9 @@ mod tests {
             "test".to_string(),
             ProviderConfigFile {
                 base_url: Some("https://api.test.com".to_string()),
-                api_key_env: "TEST_API_KEY".to_string(),
-                api_key_env_fallback: None,
+                api_key: None,
+                api_key_env: Some("TEST_API_KEY".to_string()),
                 default_model: Some("test-model".to_string()),
-                model_env: None,
-                base_url_env: None,
             },
         ));
 

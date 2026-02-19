@@ -33,11 +33,9 @@ impl AppConfig {
             "anthropic".to_string(),
             ProviderConfigFile {
                 base_url: Some("https://api.anthropic.com".to_string()),
-                api_key_env: "ANTHROPIC_AUTH_TOKEN".to_string(),
-                api_key_env_fallback: Some("ANTHROPIC_API_KEY".to_string()),
+                api_key: None,
+                api_key_env: Some("ANTHROPIC_AUTH_TOKEN".to_string()),
                 default_model: Some("claude-opus-4-5".to_string()),
-                model_env: Some("ANTHROPIC_MODEL".to_string()),
-                base_url_env: Some("ANTHROPIC_BASE_URL".to_string()),
             },
         );
 
@@ -101,16 +99,12 @@ pub struct GeneralConfig {
 pub struct ProviderConfigFile {
     /// API base URL
     pub base_url: Option<String>,
-    /// API key environment variable name (required)
-    pub api_key_env: String,
-    /// Fallback API key environment variable name (optional)
-    pub api_key_env_fallback: Option<String>,
+    /// API key (default value)
+    pub api_key: Option<String>,
+    /// API key environment variable name (overrides api_key if set)
+    pub api_key_env: Option<String>,
     /// Default model
     pub default_model: Option<String>,
-    /// Model environment variable name
-    pub model_env: Option<String>,
-    /// Base URL environment variable name (overrides base_url if set)
-    pub base_url_env: Option<String>,
 }
 
 /// Application configuration read from environment variables.
@@ -163,11 +157,8 @@ mod tests {
             .cloned()
             .unwrap();
 
-        assert_eq!(provider.api_key_env, "ANTHROPIC_AUTH_TOKEN");
-        assert_eq!(
-            provider.api_key_env_fallback,
-            Some("ANTHROPIC_API_KEY".to_string())
-        );
+        assert_eq!(provider.api_key_env, Some("ANTHROPIC_AUTH_TOKEN".to_string()));
+        assert_eq!(provider.api_key, None);
         assert_eq!(
             provider.base_url,
             Some("https://api.anthropic.com".to_string())
