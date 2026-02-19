@@ -10,6 +10,7 @@ use crate::api::anthropic::models::{
     ModelPreference, fetch_available_models, recommend_model, validate_model,
 };
 use crate::config::{AppConfig, ProviderConfigFile};
+use anyhow::Result;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use reqwest::Client as HttpClient;
@@ -41,6 +42,77 @@ pub trait Provider: Send + Sync {
 }
 
 impl ProviderConfig {
+    /// Parse model string and create ProviderConfig.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_str` - Model specification in either "provider/model" or "model" format
+    ///
+    /// # Examples
+    ///
+    /// * "zhipuai/glm-4.7" → uses zhipuai provider with glm-4.7 model
+    /// * "glm-4.7" → uses default model provider (configured or "anthropic") with glm-4.7 model
+    ///
+    /// # Errors
+    ///
+    /// Returns error if provider is not found or API key is missing.
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration with the specified model.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use neco_core::ProviderConfig;
+    /// # async fn test() -> anyhow::Result<()> {
+    /// let config = ProviderConfig::from_model_string("zhipuai/glm-4.7").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn from_model_string(model_str: &str) -> Result<Self> {
+        let app_config = AppConfig::load();
+
+        let (provider_name, model) = if model_str.contains('/') {
+            let parts: Vec<&str> = model_str.splitn(2, '/').collect();
+            (parts[0], parts[1])
+        } else {
+            (app_config.get_default_model_provider(), model_str)
+        };
+
+        let provider_file = app_config
+            .get_provider_config(provider_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+            })?;
+
+        let provider = Arc::new(ConfigFileProvider::new(
+            provider_name.to_string(),
+            provider_file.clone(),
+        ));
+
+        let mut config = provider.load_config();
+        config.model = model.to_string();
+
+        let should_validate = std::env::var("NEOCODE_VALIDATE_MODEL")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
+        let preference = match std::env::var("NEOCODE_MODEL_PREFERENCE").as_deref() {
+            Ok("opus") => Some(ModelPreference::Opus),
+            Ok("sonnet") => Some(ModelPreference::Sonnet),
+            Ok("haiku") => Some(ModelPreference::Haiku),
+            _ => None,
+        };
+
+        config.model = provider
+            .validate_and_recommend_model(&config.model, should_validate, preference)
+            .await;
+
+        Ok(config)
+    }
+
     /// Load configuration from environment with automatic provider detection.
     ///
     /// This method automatically detects available providers and loads their configuration.

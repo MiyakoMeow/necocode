@@ -7,9 +7,12 @@ use std::path::PathBuf;
 /// Application configuration file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AppConfig {
-    /// General settings
+    /// Default model provider (defaults to "anthropic")
     #[serde(default)]
-    pub general: GeneralConfig,
+    pub default_model_provider: Option<String>,
+    /// Default model name (optional)
+    #[serde(default)]
+    pub default_model: Option<String>,
     /// Provider configurations
     #[serde(default)]
     pub model_providers: IndexMap<String, ProviderConfigFile>,
@@ -18,7 +21,8 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            general: GeneralConfig::default(),
+            default_model_provider: None,
+            default_model: None,
             model_providers: Self::builtin_providers(),
         }
     }
@@ -62,7 +66,8 @@ impl AppConfig {
             for (name, provider) in user_config.model_providers {
                 config.model_providers.insert(name, provider);
             }
-            config.general = user_config.general;
+            config.default_model_provider = user_config.default_model_provider;
+            config.default_model = user_config.default_model;
         }
 
         config
@@ -86,13 +91,34 @@ impl AppConfig {
 
         None
     }
-}
 
-/// General application configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct GeneralConfig {
-    /// Currently active provider (optional, defaults to auto-detection)
-    pub active_provider: Option<String>,
+    /// Get the default model provider name.
+    ///
+    /// Returns the configured default model provider, or "anthropic" if not set.
+    ///
+    /// # Returns
+    ///
+    /// The default model provider name.
+    #[must_use]
+    pub fn get_default_model_provider(&self) -> &str {
+        self.default_model_provider
+            .as_deref()
+            .unwrap_or("anthropic")
+    }
+
+    /// Get provider configuration by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The provider name
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration if found, `None` otherwise.
+    #[must_use]
+    pub fn get_provider_config(&self, name: &str) -> Option<&ProviderConfigFile> {
+        self.model_providers.get(name)
+    }
 }
 
 /// Provider configuration loaded from file.

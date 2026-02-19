@@ -111,6 +111,7 @@ impl App {
     /// * `config` - Application configuration
     /// * `input_receiver` - Channel for receiving user input
     /// * `message` - Optional single message to process (non-interactive mode)
+    /// * `model_arg` - Optional model specification (e.g., "provider/model" or "model")
     ///
     /// # Returns
     ///
@@ -126,6 +127,7 @@ impl App {
         config: Config,
         input_receiver: mpsc::UnboundedReceiver<String>,
         message: Option<String>,
+        model_arg: Option<String>,
         rt: &tokio::runtime::Runtime,
     ) -> Result<(
         mpsc::UnboundedReceiver<CoreEvent>,
@@ -133,7 +135,11 @@ impl App {
         ProviderConfig,
     )> {
         let (event_receiver, handle, provider_config) = rt.block_on(async move {
-            let provider_config = ProviderConfig::from_env_with_validation().await;
+            let provider_config = if let Some(model_str) = model_arg {
+                ProviderConfig::from_model_string(&model_str).await?
+            } else {
+                ProviderConfig::from_env_with_validation().await
+            };
             let (event_sender, event_receiver) = mpsc::unbounded_channel();
             let mut app = Self::new_internal(provider_config.clone(), config, event_sender);
 
