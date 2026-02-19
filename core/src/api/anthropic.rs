@@ -14,6 +14,7 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// Anthropic API configuration.
@@ -86,7 +87,7 @@ impl AnthropicConfig {
     ///
     /// # Environment Variables
     ///
-    /// - `ANTHROPIC_BASE_URL`: Base URL for API (default: "https://api.anthropic.com")
+    /// - `ANTHROPIC_BASE_URL`: Base URL for API (default: "<https://api.anthropic.com>")
     /// - `ANTHROPIC_MODEL` or `MODEL`: Model to use
     /// - `ANTHROPIC_AUTH_TOKEN` or `ANTHROPIC_API_KEY`: API key
     /// - `NEOCODE_VALIDATE_MODEL`: Enable model validation (default: false)
@@ -521,6 +522,8 @@ pub struct Client {
     http_client: HttpClient,
     /// API configuration, contains key, base URL and other information
     config: AnthropicConfig,
+    /// Tool registry for executing tools
+    tool_registry: Arc<tools::ToolRegistry>,
 }
 
 impl Client {
@@ -529,6 +532,7 @@ impl Client {
         Self {
             http_client: HttpClient::new(),
             config,
+            tool_registry: Arc::new(tools::ToolRegistry::new()),
         }
     }
 
@@ -777,80 +781,9 @@ impl Client {
     ///
     /// Tool result as string, or error message
     async fn run_tool(&self, name: &str, input: &serde_json::Map<String, Value>) -> String {
-        let result = async {
-            match name {
-                "read" => {
-                    let path = input
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
-                    let offset = input
-                        .get("offset")
-                        .and_then(serde_json::Value::as_i64)
-                        .and_then(|v| usize::try_from(v).ok());
-                    let limit = input
-                        .get("limit")
-                        .and_then(serde_json::Value::as_i64)
-                        .and_then(|v| usize::try_from(v).ok());
-                    tools::read_tool(path, offset, limit).await
-                }
-                "write" => {
-                    let path = input
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
-                    let content = input
-                        .get("content")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
-                    tools::write_tool(path, content).await
-                }
-                "edit" => {
-                    let path = input
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
-                    let old = input
-                        .get("old")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing old"))?;
-                    let new = input
-                        .get("new")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing new"))?;
-                    let all = input.get("all").and_then(serde_json::Value::as_bool);
-                    tools::edit_tool(path, old, new, all).await
-                }
-                "glob" => {
-                    let pat = input
-                        .get("pat")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing pat"))?;
-                    let path = input.get("path").and_then(|v| v.as_str());
-                    Ok(tools::glob_tool(pat, path)?)
-                }
-                "grep" => {
-                    let pat = input
-                        .get("pat")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing pat"))?;
-                    let path = input.get("path").and_then(|v| v.as_str());
-                    tools::grep_tool(pat, path).await
-                }
-                "bash" => {
-                    let cmd = input
-                        .get("cmd")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| anyhow::anyhow!("Missing cmd"))?;
-                    tools::bash_tool(cmd).await
-                }
-                _ => anyhow::bail!("Unknown tool: {name}"),
-            }
-        }
-        .await;
-
-        match result {
-            Ok(s) => s,
+        let input_value = json!(input);
+        match self.tool_registry.execute(name, &input_value).await {
+            Ok(result) => result,
             Err(e) => format!("error: {e}"),
         }
     }

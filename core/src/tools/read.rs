@@ -1,7 +1,11 @@
 //! File reading tool with line number support.
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
+use serde_json::Value;
 use tokio::fs;
+
+use crate::tools::Tool;
 
 /// Read file contents with line numbers.
 ///
@@ -33,4 +37,55 @@ pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) 
         .join("\n");
 
     Ok(result)
+}
+
+/// Read tool wrapper.
+pub struct ReadTool;
+
+#[async_trait]
+impl Tool for ReadTool {
+    fn name(&self) -> &str {
+        "read"
+    }
+
+    fn description(&self) -> &str {
+        "Read a file or directory. If reading a directory, list the files in the directory. If reading a file, this tool will return the contents of the file as a string. This tool is useful for reading code, configuration files, documentation, and any other text-based files. The output includes line numbers to make it easy to reference specific lines."
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The absolute or relative path to the file or directory to read"
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "The line number to start reading from (1-indexed). Only valid when reading files, not directories. This parameter can be used with limit to read a specific range of lines."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "The maximum number of lines to read. Only valid when reading files, not directories. This parameter can be used with offset to read a specific range of lines."
+                }
+            },
+            "required": ["path"]
+        })
+    }
+
+    async fn execute(&self, input: &Value) -> Result<String> {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
+        let offset = input
+            .get("offset")
+            .and_then(serde_json::Value::as_i64)
+            .and_then(|v| usize::try_from(v).ok());
+        let limit = input
+            .get("limit")
+            .and_then(serde_json::Value::as_i64)
+            .and_then(|v| usize::try_from(v).ok());
+        read_tool(path, offset, limit).await
+    }
 }
