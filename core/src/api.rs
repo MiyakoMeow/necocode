@@ -6,14 +6,10 @@ pub mod anthropic;
 
 pub use crate::config::ProviderConfig;
 
-use crate::api::anthropic::models::{
-    ModelPreference, fetch_available_models, recommend_model, validate_model,
-};
 use crate::config::{AppConfig, ProviderConfigFile};
 use anyhow::Result;
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use reqwest::Client as HttpClient;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -31,14 +27,6 @@ pub trait Provider: Send + Sync {
 
     /// Load configuration from environment variables.
     fn load_config(&self) -> ProviderConfig;
-
-    /// Validate and recommend model (async).
-    async fn validate_and_recommend_model(
-        &self,
-        current_model: &str,
-        validate: bool,
-        preference: Option<ModelPreference>,
-    ) -> String;
 }
 
 impl ProviderConfig {
@@ -175,37 +163,6 @@ impl Provider for ConfigFileProvider {
             base_url,
             model,
             api_key,
-        }
-    }
-
-    async fn validate_and_recommend_model(
-        &self,
-        current_model: &str,
-        validate: bool,
-        preference: Option<ModelPreference>,
-    ) -> String {
-        if !validate {
-            return current_model.to_string();
-        }
-
-        let config = self.load_config();
-        let http_client = HttpClient::new();
-
-        match fetch_available_models(&http_client, &config.base_url, &config.api_key).await {
-            Ok(available_models) => {
-                if current_model.is_empty() || !validate_model(current_model, &available_models) {
-                    if let Some(recommended) = recommend_model(&available_models, preference) {
-                        eprintln!("🤖 Auto-selected model: {}", recommended);
-                        recommended
-                    } else {
-                        current_model.to_string()
-                    }
-                } else {
-                    eprintln!("✓ Model validated: {}", current_model);
-                    current_model.to_string()
-                }
-            }
-            Err(_) => current_model.to_string(),
         }
     }
 }

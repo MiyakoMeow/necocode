@@ -16,9 +16,6 @@ pub mod tools;
 // Re-export common types from api::anthropic
 pub use api::anthropic::{ApiError, Client};
 
-// Re-export common types from api::anthropic::models
-pub use api::anthropic::models::{ModelInfo, ModelPreference};
-
 // Re-export provider types
 pub use api::{ConfigFileProvider, Provider, ProviderRegistry};
 
