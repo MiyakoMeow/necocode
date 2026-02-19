@@ -39,7 +39,7 @@ pub trait Provider: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
     /// Provider name
-    pub provider_name: String,
+    pub name: String,
     /// API base URL
     pub base_url: String,
     /// Model name
@@ -98,10 +98,10 @@ impl ProviderConfig {
     /// Get provider display name.
     #[must_use]
     pub fn provider_display_name(&self) -> &str {
-        match self.provider_name.as_str() {
+        match self.name.as_str() {
             "anthropic" => "Anthropic",
             "zhipuai" => "ZhipuAI",
-            _ => &self.provider_name,
+            _ => &self.name,
         }
     }
 
@@ -190,7 +190,7 @@ impl Provider for ConfigFileProvider {
             .unwrap_or_else(|| "claude-opus-4-5".to_string());
 
         ProviderConfig {
-            provider_name: self.name.clone(),
+            name: self.name.clone(),
             base_url,
             model,
             api_key,
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn test_provider_config_masked_api_key() {
         let config = ProviderConfig {
-            provider_name: "test".to_string(),
+            name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
             api_key: "sk-test1234abcd".to_string(),
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_provider_config_masked_api_key_short() {
         let config = ProviderConfig {
-            provider_name: "test".to_string(),
+            name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
             api_key: "short".to_string(),
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn test_provider_config_masked_api_key_empty() {
         let config = ProviderConfig {
-            provider_name: "test".to_string(),
+            name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
             api_key: String::new(),
