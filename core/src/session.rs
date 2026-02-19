@@ -70,7 +70,7 @@ impl Session {
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let (event_sender, _) = mpsc::unbounded_channel();
-    /// let config = ProviderConfig::from_env();
+    /// let config = ProviderConfig::from_env_with_validation().await;
     /// let mut session = Session::new(config, "/path".to_string());
     /// let reader = StdinInputReader;
     ///

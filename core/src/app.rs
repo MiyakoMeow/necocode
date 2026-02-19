@@ -20,8 +20,12 @@ use tokio::task::JoinHandle;
 /// use neco_core::{App, ProviderConfig, Config, StdinInputReader};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let provider_config = ProviderConfig::from_env();
-/// let config = Config::from_env();
+/// let rt = tokio::runtime::Runtime::new()?;
+/// let (provider_config, config) = rt.block_on(async {
+///     let provider_config = ProviderConfig::from_env_with_validation().await;
+///     let config = Config::from_env();
+///     (provider_config, config)
+/// });
 /// let mut app = App::new(provider_config, config)?;
 ///
 /// // Get event receiver for rendering

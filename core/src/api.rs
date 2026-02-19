@@ -75,17 +75,7 @@ impl ProviderConfig {
         config
     }
 
-    /// Load configuration from environment (synchronous version without validation).
-    ///
-    /// # Returns
-    ///
-    /// The provider configuration.
-    #[must_use]
-    pub fn from_env() -> Self {
-        tokio::runtime::Runtime::new()
-            .expect("Failed to create runtime")
-            .block_on(async { Self::from_env_with_validation().await })
-    }
+
 }
 
 /// Provider loaded from configuration file.
