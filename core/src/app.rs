@@ -4,10 +4,10 @@
 //! sessions, event channels, and the main execution loop.
 
 use crate::command::UserCommand;
+use crate::config::{Config, ProviderConfig};
 use crate::events::CoreEvent;
 use crate::input::InputReader;
 use crate::session::Session;
-use crate::{ProviderConfig, Config};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;

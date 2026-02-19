@@ -3,8 +3,10 @@
 //! This module defines a flexible provider system that allows runtime registration
 //! of different LLM providers through a configuration file.
 
-use crate::config::{AppConfig, ProviderConfigFile};
-use crate::api::anthropic::models::{ModelPreference, fetch_available_models, recommend_model, validate_model};
+use crate::api::anthropic::models::{
+    ModelPreference, fetch_available_models, recommend_model, validate_model,
+};
+use crate::config::{AppConfig, ProviderConfig, ProviderConfigFile};
 use async_trait::async_trait;
 use reqwest::Client as HttpClient;
 use std::collections::HashMap;
@@ -33,19 +35,6 @@ pub trait Provider: Send + Sync {
         validate: bool,
         preference: Option<ModelPreference>,
     ) -> String;
-}
-
-/// Provider configuration (unified for all providers).
-#[derive(Debug, Clone)]
-pub struct ProviderConfig {
-    /// Provider name
-    pub name: String,
-    /// API base URL
-    pub base_url: String,
-    /// Model name
-    pub model: String,
-    /// API key
-    pub api_key: String,
 }
 
 impl ProviderConfig {
@@ -93,35 +82,6 @@ impl ProviderConfig {
         tokio::runtime::Runtime::new()
             .expect("Failed to create runtime")
             .block_on(async { Self::from_env_with_validation().await })
-    }
-
-    /// Get provider display name.
-    #[must_use]
-    pub fn provider_display_name(&self) -> &str {
-        match self.name.as_str() {
-            "anthropic" => "Anthropic",
-            "zhipuai" => "ZhipuAI",
-            _ => &self.name,
-        }
-    }
-
-    /// Get masked API key for display (shows only first and last 4 chars).
-    #[must_use]
-    pub fn masked_api_key(&self) -> String {
-        let key = &self.api_key;
-        if key.len() > 8 {
-            format!("{}...{}", &key[..4], &key[key.len() - 4..])
-        } else if !key.is_empty() {
-            "*".repeat(key.len())
-        } else {
-            "(no key)".to_string()
-        }
-    }
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self::from_env()
     }
 }
 
@@ -204,9 +164,7 @@ impl Provider for ConfigFileProvider {
 
         match fetch_available_models(&http_client, &config.base_url, &config.api_key).await {
             Ok(available_models) => {
-                if current_model.is_empty()
-                    || !validate_model(current_model, &available_models)
-                {
+                if current_model.is_empty() || !validate_model(current_model, &available_models) {
                     if let Some(recommended) = recommend_model(&available_models, preference) {
                         eprintln!("🤖 Auto-selected model: {}", recommended);
                         recommended
@@ -275,8 +233,7 @@ impl ProviderRegistry {
     ///
     /// If a provider with the same name already exists, it will be replaced.
     pub fn register(&mut self, provider: Arc<dyn Provider>) {
-        self.providers
-            .insert(provider.name().to_string(), provider);
+        self.providers.insert(provider.name().to_string(), provider);
     }
 
     /// Auto-detect and select the first available provider.

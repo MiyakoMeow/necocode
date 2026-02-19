@@ -57,12 +57,13 @@ impl AppConfig {
 
         if let Some(user_config_path) = Self::get_config_path()
             && let Ok(content) = std::fs::read_to_string(&user_config_path)
-                && let Ok(user_config) = toml::from_str::<AppConfig>(&content) {
-                    for (name, provider) in user_config.model_providers {
-                        config.model_providers.insert(name, provider);
-                    }
-                    config.general = user_config.general;
-                }
+            && let Ok(user_config) = toml::from_str::<AppConfig>(&content)
+        {
+            for (name, provider) in user_config.model_providers {
+                config.model_providers.insert(name, provider);
+            }
+            config.general = user_config.general;
+        }
 
         config
     }
@@ -114,6 +115,44 @@ pub struct Config {
     pub cwd: String,
 }
 
+/// Provider configuration (unified for all providers).
+#[derive(Debug, Clone)]
+pub struct ProviderConfig {
+    /// Provider name
+    pub name: String,
+    /// API base URL
+    pub base_url: String,
+    /// Model name
+    pub model: String,
+    /// API key
+    pub api_key: String,
+}
+
+impl ProviderConfig {
+    /// Get provider display name.
+    #[must_use]
+    pub fn provider_display_name(&self) -> &str {
+        match self.name.as_str() {
+            "anthropic" => "Anthropic",
+            "zhipuai" => "ZhipuAI",
+            _ => &self.name,
+        }
+    }
+
+    /// Get masked API key for display (shows only first and last 4 chars).
+    #[must_use]
+    pub fn masked_api_key(&self) -> String {
+        let key = &self.api_key;
+        if key.len() > 8 {
+            format!("{}...{}", &key[..4], &key[key.len() - 4..])
+        } else if !key.is_empty() {
+            "*".repeat(key.len())
+        } else {
+            "(no key)".to_string()
+        }
+    }
+}
+
 impl Config {
     /// Load configuration from environment variables.
     ///
@@ -157,7 +196,10 @@ mod tests {
             .cloned()
             .unwrap();
 
-        assert_eq!(provider.api_key_env, Some("ANTHROPIC_AUTH_TOKEN".to_string()));
+        assert_eq!(
+            provider.api_key_env,
+            Some("ANTHROPIC_AUTH_TOKEN".to_string())
+        );
         assert_eq!(provider.api_key, None);
         assert_eq!(
             provider.base_url,

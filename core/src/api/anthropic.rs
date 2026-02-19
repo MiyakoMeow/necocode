@@ -5,9 +5,9 @@
 pub mod models;
 pub mod schema;
 
+use crate::config::ProviderConfig;
 use crate::events;
 use crate::tools;
-use crate::api::provider::ProviderConfig;
 use anyhow::Result;
 use futures::stream::Stream;
 use reqwest::Client as HttpClient;

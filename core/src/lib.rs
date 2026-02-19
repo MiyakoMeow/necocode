@@ -20,10 +20,10 @@ pub use api::anthropic::{ApiError, Client};
 pub use api::anthropic::models::{ModelInfo, ModelPreference};
 
 // Re-export provider types
-pub use api::provider::{Provider, ProviderConfig, ProviderRegistry, ConfigFileProvider};
+pub use api::provider::{ConfigFileProvider, Provider, ProviderRegistry};
 
-// Re-export Config type from config
-pub use config::Config;
+// Re-export configuration types
+pub use config::{AppConfig, Config, GeneralConfig, ProviderConfig, ProviderConfigFile};
 
 // Re-export CoreEvent type from events
 pub use events::CoreEvent;

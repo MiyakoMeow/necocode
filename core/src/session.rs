@@ -3,10 +3,11 @@
 //! This module contains the main session logic that handles both
 //! interactive REPL loops and single-message execution.
 
+use crate::Client;
 use crate::command::UserCommand;
+use crate::config::ProviderConfig;
 use crate::events::CoreEvent;
 use crate::input::InputReader;
-use crate::{ProviderConfig, Client};
 use anyhow::Result;
 use serde_json::json;
 use tokio::sync::mpsc;
