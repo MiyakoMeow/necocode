@@ -30,6 +30,60 @@ pub trait Provider: Send + Sync {
 }
 
 impl ProviderConfig {
+    /// Parse boolean environment variable with default.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Environment variable name
+    /// * `default` - Default value if variable is not set or invalid
+    ///
+    /// # Returns
+    ///
+    /// The parsed boolean value or default.
+    fn parse_env_bool(key: &str, default: bool) -> bool {
+        std::env::var(key)
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(default)
+    }
+
+    /// Load and validate provider configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - The provider to load from
+    /// * `provider_name` - Provider name for error messages
+    /// * `provider_file` - Provider file configuration
+    /// * `validate` - Whether to validate API key presence
+    ///
+    /// # Errors
+    ///
+    /// Returns error if API key is missing and validate is true.
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration.
+    fn load_and_validate_config(
+        provider: &Arc<dyn Provider>,
+        provider_name: &str,
+        provider_file: &ProviderConfigFile,
+        validate: bool,
+    ) -> Result<Self> {
+        let config = provider.load_config();
+
+        if validate && config.api_key.is_empty() {
+            let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
+
+            return Err(anyhow::anyhow!(
+                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
+                provider_name,
+                env_var
+            ));
+        }
+
+        Ok(config)
+    }
+
     /// Parse model string and create ProviderConfig.
     ///
     /// # Arguments
@@ -77,23 +131,53 @@ impl ProviderConfig {
         let provider = Arc::new(ConfigFileProvider::new(
             provider_name.to_string(),
             provider_file.clone(),
-        ));
+        )) as Arc<dyn Provider>;
 
-        let mut config = provider.load_config();
-
-        if config.api_key.is_empty() {
-            let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
-
-            return Err(anyhow::anyhow!(
-                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
-                provider_name,
-                env_var
-            ));
-        }
+        let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
+        let mut config = Self::load_and_validate_config(
+            &provider,
+            provider_name,
+            provider_file,
+            should_validate,
+        )?;
 
         config.model = model.to_string();
 
         Ok(config)
+    }
+
+    /// Load configuration from environment with validation.
+    ///
+    /// This method automatically detects available providers and loads their configuration
+    /// with optional API key validation based on the `NEOCODE_VALIDATE_MODEL` environment variable.
+    /// Provider detection follows the registration order in the registry.
+    ///
+    /// # Environment Variables
+    ///
+    /// * `NEOCODE_VALIDATE_MODEL` - Set to "false" to skip API key validation (default: true)
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if provider detection fails or API key validation fails.
+    pub async fn from_env_with_validation() -> Result<Self> {
+        let registry = ProviderRegistry::global().read().await;
+        let provider = registry.detect_provider().await;
+        drop(registry);
+
+        let provider_name = provider.name();
+        let app_config = AppConfig::load();
+        let provider_file = app_config
+            .get_provider_config(provider_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+            })?;
+
+        let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
+        Self::load_and_validate_config(&provider, provider_name, provider_file, should_validate)
     }
 
     /// Load configuration from environment with automatic provider detection.
