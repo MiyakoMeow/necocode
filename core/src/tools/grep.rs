@@ -3,7 +3,6 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::Value;
-use tokio::fs;
 
 use crate::tools::Tool;
 
@@ -18,40 +17,44 @@ use crate::tools::Tool;
 ///
 /// Newline-separated matches in format "path:line:content", up to 50 matches
 pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
-    let base = path.unwrap_or(".");
+    let base = path.unwrap_or(".").to_string();
     let pattern =
         regex::Regex::new(pat).with_context(|| format!("Invalid regex pattern: {pat}"))?;
 
-    let mut hits = Vec::new();
+    tokio::task::spawn_blocking(move || {
+        let mut hits = Vec::new();
 
-    for entry in walkdir::WalkDir::new(base)
-        .follow_links(true)
-        .max_depth(100)
-        .into_iter()
-        .filter_map(std::result::Result::ok)
-    {
-        let filepath = entry.path();
-        if filepath.is_file()
-            && let Ok(content) = fs::read_to_string(filepath).await
+        for entry in walkdir::WalkDir::new(&base)
+            .follow_links(true)
+            .max_depth(100)
+            .into_iter()
+            .filter_map(std::result::Result::ok)
         {
-            for (line_num, line) in content.lines().enumerate() {
-                if pattern.is_match(line) {
-                    hits.push(format!(
-                        "{}:{}:{}",
-                        filepath.display().to_string().replace('\\', "/"),
-                        line_num + 1,
-                        line.trim()
-                    ));
+            let filepath = entry.path();
+            if filepath.is_file()
+                && let Ok(content) = std::fs::read_to_string(filepath)
+            {
+                for (line_num, line) in content.lines().enumerate() {
+                    if pattern.is_match(line) {
+                        hits.push(format!(
+                            "{}:{}:{}",
+                            filepath.display().to_string().replace('\\', "/"),
+                            line_num + 1,
+                            line.trim()
+                        ));
+                    }
                 }
             }
         }
-    }
 
-    if hits.is_empty() {
-        Ok("none".to_string())
-    } else {
-        Ok(hits.iter().take(50).cloned().collect::<Vec<_>>().join("\n"))
-    }
+        if hits.is_empty() {
+            Ok("none".to_string())
+        } else {
+            Ok(hits.iter().take(50).cloned().collect::<Vec<_>>().join("\n"))
+        }
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!("Task join error: {e}"))?
 }
 
 /// Grep tool wrapper.

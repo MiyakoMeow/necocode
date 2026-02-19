@@ -94,8 +94,15 @@ impl Tool for GlobTool {
         let pat = input
             .get("pat")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing pat"))?;
-        let path = input.get("path").and_then(|v| v.as_str());
-        Ok(glob_tool(pat, path)?)
+            .ok_or_else(|| anyhow::anyhow!("Missing pat"))?
+            .to_string();
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        tokio::task::spawn_blocking(move || glob_tool(&pat, path.as_deref()))
+            .await
+            .map_err(|e| anyhow::anyhow!("Task join error: {e}"))?
     }
 }
