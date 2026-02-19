@@ -122,13 +122,12 @@ impl App {
         config: Config,
         input_receiver: mpsc::UnboundedReceiver<String>,
         message: Option<String>,
+        rt: &tokio::runtime::Runtime,
     ) -> Result<(
         mpsc::UnboundedReceiver<CoreEvent>,
         JoinHandle<Result<()>>,
         ProviderConfig,
     )> {
-        let rt = tokio::runtime::Runtime::new()?;
-
         let (event_receiver, handle, provider_config) = rt.block_on(async move {
             let provider_config = ProviderConfig::from_env_with_validation().await;
             let (event_sender, event_receiver) = mpsc::unbounded_channel();

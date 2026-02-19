@@ -97,7 +97,7 @@ fn main() -> ExitCode {
     let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
     let (event_receiver, main_handle, provider_config) =
-        match App::run(config, input_receiver, args.message.clone()) {
+        match App::run(config, input_receiver, args.message.clone(), &rt) {
             Ok(result) => result,
             Err(e) => {
                 eprintln!("{} Failed to start: {}", "❌".red(), e);
@@ -113,8 +113,7 @@ fn main() -> ExitCode {
         provider_config.masked_api_key().yellow(),
     );
 
-    let event_rt = tokio::runtime::Runtime::new().expect("Failed to create event runtime");
-    let render_handle = event_rt.spawn(async move {
+    let render_handle = rt.spawn(async move {
         handle_core_events(event_receiver).await;
     });
 
@@ -132,7 +131,7 @@ fn main() -> ExitCode {
         }
     }
 
-    match event_rt.block_on(async {
+    match rt.block_on(async {
         let _ = render_handle.await;
         main_handle.await.unwrap()
     }) {
