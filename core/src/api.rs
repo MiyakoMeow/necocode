@@ -11,8 +11,8 @@ use crate::api::anthropic::models::{
 };
 use crate::config::{AppConfig, ProviderConfigFile};
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use reqwest::Client as HttpClient;
-use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -187,7 +187,7 @@ impl Provider for ConfigFileProvider {
 /// Provider registry (singleton pattern).
 pub struct ProviderRegistry {
     /// Registered providers
-    providers: HashMap<String, Arc<dyn Provider>>,
+    providers: IndexMap<String, Arc<dyn Provider>>,
     /// Default provider name
     default_provider: Option<String>,
 }
@@ -211,7 +211,7 @@ impl ProviderRegistry {
     #[must_use]
     fn new() -> Self {
         Self {
-            providers: HashMap::new(),
+            providers: IndexMap::new(),
             default_provider: Some("anthropic".to_string()),
         }
     }

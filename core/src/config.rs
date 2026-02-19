@@ -1,7 +1,7 @@
 //! Configuration management for neco
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Application configuration file.
@@ -12,7 +12,7 @@ pub struct AppConfig {
     pub general: GeneralConfig,
     /// Provider configurations
     #[serde(default)]
-    pub model_providers: HashMap<String, ProviderConfigFile>,
+    pub model_providers: IndexMap<String, ProviderConfigFile>,
 }
 
 impl Default for AppConfig {
@@ -26,8 +26,8 @@ impl Default for AppConfig {
 
 impl AppConfig {
     /// Get built-in provider configurations.
-    fn builtin_providers() -> HashMap<String, ProviderConfigFile> {
-        let mut providers = HashMap::new();
+    fn builtin_providers() -> IndexMap<String, ProviderConfigFile> {
+        let mut providers = IndexMap::new();
 
         providers.insert(
             "anthropic".to_string(),
