@@ -7,8 +7,8 @@
 //! - ToolRegistry for centralized tool management
 
 use anyhow::Result;
+use indexmap::IndexMap;
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -66,7 +66,7 @@ pub trait Tool: Send + Sync {
 /// The registry maintains a collection of tools and provides methods
 /// for tool registration, execution, and schema retrieval.
 pub struct ToolRegistry {
-    tools: HashMap<String, Arc<dyn Tool>>,
+    tools: IndexMap<String, Arc<dyn Tool>>,
 }
 
 impl ToolRegistry {
@@ -74,7 +74,7 @@ impl ToolRegistry {
     #[must_use]
     pub fn new() -> Self {
         let mut registry = Self {
-            tools: HashMap::new(),
+            tools: IndexMap::new(),
         };
         registry.register_all();
         registry

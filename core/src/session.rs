@@ -3,10 +3,11 @@
 //! This module contains the main session logic that handles both
 //! interactive REPL loops and single-message execution.
 
+use crate::Client;
 use crate::command::UserCommand;
+use crate::config::ProviderConfig;
 use crate::events::CoreEvent;
 use crate::input::InputReader;
-use crate::{AnthropicConfig, Client};
 use anyhow::Result;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -31,10 +32,10 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `config` - Anthropic API configuration
+    /// * `config` - Provider API configuration
     /// * `cwd` - Current working directory for context
     #[must_use]
-    pub fn new(config: AnthropicConfig, cwd: String) -> Self {
+    pub fn new(config: ProviderConfig, cwd: String) -> Self {
         let client = Client::new(config);
         let system_prompt = format!("Concise coding assistant. cwd: {}", cwd);
         let schema = crate::api::anthropic::schema::tool_schemas();
@@ -64,12 +65,12 @@ impl Session {
     /// # Examples
     ///
     /// ```no_run
-    /// use neco_core::{Session, StdinInputReader, AnthropicConfig};
+    /// use neco_core::{Session, StdinInputReader, ProviderConfig};
     /// use tokio::sync::mpsc;
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let (event_sender, _) = mpsc::unbounded_channel();
-    /// let config = AnthropicConfig::from_env();
+    /// let config = ProviderConfig::from_env_with_validation().await;
     /// let mut session = Session::new(config, "/path".to_string());
     /// let reader = StdinInputReader;
     ///
@@ -268,9 +269,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_session_clear_history() {
-        let config = AnthropicConfig::from_env();
+    #[tokio::test]
+    async fn test_session_clear_history() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+        drop(registry);
+
+        let config = ProviderConfig::from_env_with_validation().await;
         let mut session = Session::new(config, "/test".to_string());
 
         session
@@ -282,9 +287,13 @@ mod tests {
         assert!(session.messages.is_empty());
     }
 
-    #[test]
-    fn test_session_new() {
-        let config = AnthropicConfig::from_env();
+    #[tokio::test]
+    async fn test_session_new() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+        drop(registry);
+
+        let config = ProviderConfig::from_env_with_validation().await;
         let session = Session::new(config, "/test".to_string());
 
         assert!(session.messages.is_empty());

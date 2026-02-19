@@ -3,9 +3,27 @@
 use anyhow::Result;
 use std::path::Path;
 use tracing_appender::{non_blocking, rolling};
-use tracing_subscriber::{Registry, fmt, prelude::*};
+use tracing_subscriber::{EnvFilter, Registry, fmt, prelude::*};
 
 /// Initialize tracing subscriber with file and console output.
+///
+/// # Log Levels
+///
+/// By default, the console outputs only WARN and ERROR level logs.
+/// The file appender captures all log levels for debugging purposes.
+///
+/// To customize the log level, set the `RUST_LOG` environment variable:
+///
+/// ```sh
+/// # Show INFO and above on console
+/// RUST_LOG=info neco -m "hello"
+///
+/// # Show DEBUG and above on console
+/// RUST_LOG=debug neco -m "hello"
+///
+/// # Show TRACE for a specific module
+/// RUST_LOG=neco::api=trace neco -m "hello"
+/// ```
 ///
 /// # Arguments
 ///
@@ -30,8 +48,14 @@ pub fn init_logging(log_dir: &Path) -> Result<()> {
     // Create non-blocking writer
     let (non_blocking_file, _guard) = non_blocking(file_appender);
 
+    // Configure environment filter (default: WARN for console, INFO for file)
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(tracing::Level::WARN.into())
+        .from_env_lossy();
+
     // Configure subscriber
     let subscriber = Registry::default()
+        .with(env_filter)
         .with(
             fmt::layer()
                 .with_writer(std::io::stdout)
