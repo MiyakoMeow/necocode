@@ -80,6 +80,17 @@ impl ProviderConfig {
         ));
 
         let mut config = provider.load_config();
+
+        if config.api_key.is_empty() {
+            let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
+
+            return Err(anyhow::anyhow!(
+                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
+                provider_name,
+                env_var
+            ));
+        }
+
         config.model = model.to_string();
 
         Ok(config)
@@ -333,5 +344,31 @@ mod tests {
     fn test_app_config_load() {
         let config = AppConfig::load();
         assert!(config.model_providers.contains_key("anthropic"));
+    }
+
+    #[tokio::test]
+    async fn test_from_model_string_missing_api_key() {
+        // Temporarily remove the API key environment variable
+        let original_key = std::env::var("ANTHROPIC_AUTH_TOKEN").ok();
+
+        unsafe {
+            std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        }
+
+        let result =
+            ProviderConfig::from_model_string("anthropic/claude-3-5-sonnet-20241022").await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("API key is missing"));
+        assert!(err_msg.contains("anthropic"));
+        assert!(err_msg.contains("ANTHROPIC_AUTH_TOKEN"));
+
+        // Restore original environment variable
+        if let Some(key) = original_key {
+            unsafe {
+                std::env::set_var("ANTHROPIC_AUTH_TOKEN", key);
+            }
+        }
     }
 }
