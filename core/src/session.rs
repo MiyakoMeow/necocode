@@ -70,7 +70,7 @@ impl Session {
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let (event_sender, _) = mpsc::unbounded_channel();
-    /// let config = ProviderConfig::from_env_with_validation().await;
+    /// let config = ProviderConfig::from_env().await;
     /// let mut session = Session::new(config, "/path".to_string());
     /// let reader = StdinInputReader;
     ///
@@ -275,7 +275,7 @@ mod tests {
         registry.register_defaults().await;
         drop(registry);
 
-        let config = ProviderConfig::from_env_with_validation().await;
+        let config = ProviderConfig::from_env().await;
         let mut session = Session::new(config, "/test".to_string());
 
         session
@@ -293,7 +293,7 @@ mod tests {
         registry.register_defaults().await;
         drop(registry);
 
-        let config = ProviderConfig::from_env_with_validation().await;
+        let config = ProviderConfig::from_env().await;
         let session = Session::new(config, "/test".to_string());
 
         assert!(session.messages.is_empty());
