@@ -20,7 +20,7 @@ pub use api::anthropic::{ApiError, Client};
 pub use api::anthropic::models::{ModelInfo, ModelPreference};
 
 // Re-export provider types
-pub use api::provider::{ConfigFileProvider, Provider, ProviderRegistry};
+pub use api::{ConfigFileProvider, Provider, ProviderRegistry};
 
 // Re-export configuration types
 pub use config::{AppConfig, Config, GeneralConfig, ProviderConfig, ProviderConfigFile};
