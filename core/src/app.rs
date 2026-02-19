@@ -7,7 +7,7 @@ use crate::command::UserCommand;
 use crate::events::CoreEvent;
 use crate::input::InputReader;
 use crate::session::Session;
-use crate::{AnthropicConfig, Config};
+use crate::{ProviderConfig, Config};
 use anyhow::Result;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -17,12 +17,12 @@ use tokio::task::JoinHandle;
 /// # Examples
 ///
 /// ```no_run
-/// use neco_core::{App, AnthropicConfig, Config, StdinInputReader};
+/// use neco_core::{App, ProviderConfig, Config, StdinInputReader};
 ///
 /// # fn main() -> anyhow::Result<()> {
-/// let anthropic_config = AnthropicConfig::from_env();
+/// let provider_config = ProviderConfig::from_env();
 /// let config = Config::from_env();
-/// let mut app = App::new(anthropic_config, config)?;
+/// let mut app = App::new(provider_config, config)?;
 ///
 /// // Get event receiver for rendering
 /// let event_receiver = app.take_event_receiver();
@@ -49,7 +49,7 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `anthropic_config` - Anthropic API configuration
+    /// * `provider_config` - Provider API configuration
     /// * `config` - Application configuration
     ///
     /// # Returns
@@ -59,9 +59,9 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if event channel creation fails.
-    pub fn new(anthropic_config: AnthropicConfig, config: Config) -> Result<Self> {
+    pub fn new(provider_config: ProviderConfig, config: Config) -> Result<Self> {
         let (event_sender, event_receiver) = mpsc::unbounded_channel();
-        let session = Session::new(anthropic_config, config.cwd.clone());
+        let session = Session::new(provider_config, config.cwd.clone());
 
         Ok(Self {
             session,
@@ -75,7 +75,7 @@ impl App {
     ///
     /// # Arguments
     ///
-    /// * `anthropic_config` - Anthropic API configuration
+    /// * `provider_config` - Provider API configuration
     /// * `config` - Application configuration
     /// * `event_sender` - Pre-created event sender
     ///
@@ -84,11 +84,11 @@ impl App {
     /// Returns a new App instance.
     #[must_use]
     fn new_internal(
-        anthropic_config: AnthropicConfig,
+        provider_config: ProviderConfig,
         config: Config,
         event_sender: mpsc::UnboundedSender<CoreEvent>,
     ) -> Self {
-        let session = Session::new(anthropic_config, config.cwd.clone());
+        let session = Session::new(provider_config, config.cwd.clone());
 
         Self {
             session,
@@ -113,7 +113,7 @@ impl App {
     /// Returns a tuple containing:
     /// - The event receiver for rendering
     /// - The main loop handle
-    /// - The loaded Anthropic config for display
+    /// - The loaded Provider config for display
     ///
     /// # Errors
     ///
@@ -125,14 +125,14 @@ impl App {
     ) -> Result<(
         mpsc::UnboundedReceiver<CoreEvent>,
         JoinHandle<Result<()>>,
-        AnthropicConfig,
+        ProviderConfig,
     )> {
         let rt = tokio::runtime::Runtime::new()?;
 
-        let (event_receiver, handle, anthropic_config) = rt.block_on(async move {
-            let anthropic_config = AnthropicConfig::from_env_with_validation().await;
+        let (event_receiver, handle, provider_config) = rt.block_on(async move {
+            let provider_config = ProviderConfig::from_env_with_validation().await;
             let (event_sender, event_receiver) = mpsc::unbounded_channel();
-            let mut app = Self::new_internal(anthropic_config.clone(), config, event_sender);
+            let mut app = Self::new_internal(provider_config.clone(), config, event_sender);
 
             let handle = if let Some(msg) = message {
                 tokio::spawn(async move { app.run_single_async(msg).await })
@@ -140,10 +140,10 @@ impl App {
                 tokio::spawn(async move { app.run_interactive_with_input(input_receiver).await })
             };
 
-            Ok::<_, anyhow::Error>((event_receiver, handle, anthropic_config))
+            Ok::<_, anyhow::Error>((event_receiver, handle, provider_config))
         })?;
 
-        Ok((event_receiver, handle, anthropic_config))
+        Ok((event_receiver, handle, provider_config))
     }
 
     /// Take the event receiver for rendering.
@@ -359,22 +359,30 @@ impl App {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_app_new() {
-        let anthropic_config = AnthropicConfig::from_env();
+    #[tokio::test]
+    async fn test_app_new() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+        drop(registry);
+
+        let provider_config = ProviderConfig::from_env_with_validation().await;
         let config = Config::from_env();
-        let app = App::new(anthropic_config, config);
+        let app = App::new(provider_config, config);
 
         assert!(app.is_ok());
         let app = app.unwrap();
         assert!(app.event_receiver().is_some());
     }
 
-    #[test]
-    fn test_app_take_event_receiver() {
-        let anthropic_config = AnthropicConfig::from_env();
+    #[tokio::test]
+    async fn test_app_take_event_receiver() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+        drop(registry);
+
+        let provider_config = ProviderConfig::from_env_with_validation().await;
         let config = Config::from_env();
-        let mut app = App::new(anthropic_config, config).unwrap();
+        let mut app = App::new(provider_config, config).unwrap();
 
         // First take should succeed
         let _receiver1 = app.take_event_receiver();
@@ -383,11 +391,15 @@ mod tests {
         assert!(app.event_receiver().is_none());
     }
 
-    #[test]
-    fn test_app_session_access() {
-        let anthropic_config = AnthropicConfig::from_env();
+    #[tokio::test]
+    async fn test_app_session_access() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+        drop(registry);
+
+        let provider_config = ProviderConfig::from_env_with_validation().await;
         let config = Config::from_env();
-        let app = App::new(anthropic_config, config).unwrap();
+        let app = App::new(provider_config, config).unwrap();
 
         // Should be able to access session
         let _session = app.session();

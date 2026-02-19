@@ -14,10 +14,13 @@ pub mod session;
 pub mod tools;
 
 // Re-export common types from api::anthropic
-pub use api::anthropic::{AnthropicConfig, ApiError, Client};
+pub use api::anthropic::{ApiError, Client};
 
 // Re-export common types from api::anthropic::models
 pub use api::anthropic::models::{ModelInfo, ModelPreference};
+
+// Re-export provider types
+pub use api::provider::{Provider, ProviderConfig, ProviderRegistry, ConfigFileProvider};
 
 // Re-export Config type from config
 pub use config::Config;

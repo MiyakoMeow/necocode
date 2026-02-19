@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use neco::separator;
 
 // Use core library modules
-use neco_core::{App, Config, CoreEvent};
+use neco_core::{App, Config, CoreEvent, ProviderRegistry};
 
 mod logging;
 
@@ -87,9 +87,16 @@ fn main() -> ExitCode {
     let config = Config::from_env();
     let _logging_enabled = setup_logging(&config);
 
+    // Initialize provider registry at startup
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+    rt.block_on(async {
+        let mut registry = ProviderRegistry::global().write().await;
+        registry.register_defaults().await;
+    });
+
     let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-    let (event_receiver, main_handle, anthropic_config) =
+    let (event_receiver, main_handle, provider_config) =
         match App::run(config, input_receiver, args.message.clone()) {
             Ok(result) => result,
             Err(e) => {
@@ -101,9 +108,9 @@ fn main() -> ExitCode {
     println!(
         "{} | {} | {} | {}\n",
         "neco".bold(),
-        anthropic_config.model.clone().dim(),
-        anthropic_config.masked_api_key().yellow(),
-        anthropic_config.base_url.clone().dim()
+        provider_config.provider_display_name().green().bold(),
+        provider_config.model.clone().dim(),
+        provider_config.masked_api_key().yellow(),
     );
 
     let event_rt = tokio::runtime::Runtime::new().expect("Failed to create event runtime");

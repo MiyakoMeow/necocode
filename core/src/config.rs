@@ -1,6 +1,133 @@
-//! Configuration management for nanocode
+//! Configuration management for neco
 
-use std::env;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+/// Application configuration file.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppConfig {
+    /// General settings
+    #[serde(default)]
+    pub general: GeneralConfig,
+    /// Provider configurations
+    #[serde(default)]
+    pub model_providers: HashMap<String, ProviderConfigFile>,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            general: GeneralConfig::default(),
+            model_providers: Self::builtin_providers(),
+        }
+    }
+}
+
+impl AppConfig {
+    /// Get built-in provider configurations.
+    fn builtin_providers() -> HashMap<String, ProviderConfigFile> {
+        let mut providers = HashMap::new();
+
+        providers.insert(
+            "anthropic".to_string(),
+            ProviderConfigFile {
+                display_name: Some("Anthropic".to_string()),
+                base_url: Some("https://api.anthropic.com".to_string()),
+                api_key_env: "ANTHROPIC_AUTH_TOKEN".to_string(),
+                api_key_env_fallback: Some("ANTHROPIC_API_KEY".to_string()),
+                default_model: Some("claude-opus-4-5".to_string()),
+                model_env: Some("ANTHROPIC_MODEL".to_string()),
+                base_url_env: Some("ANTHROPIC_BASE_URL".to_string()),
+            },
+        );
+
+        providers.insert(
+            "zhipuai".to_string(),
+            ProviderConfigFile {
+                display_name: Some("ZhipuAI (智谱AI)".to_string()),
+                base_url: Some("https://open.bigmodel.cn/api/anthropic".to_string()),
+                api_key_env: "ZHIPU_API_KEY".to_string(),
+                api_key_env_fallback: None,
+                default_model: Some("claude-opus-4-5".to_string()),
+                model_env: Some("ANTHROPIC_MODEL".to_string()),
+                base_url_env: Some("ANTHROPIC_BASE_URL".to_string()),
+            },
+        );
+
+        providers
+    }
+
+    /// Load configuration from file, merging with built-in defaults.
+    ///
+    /// This method loads user configuration from `~/.config/neco/config.toml`
+    /// and merges it with built-in provider configurations. User-defined
+    /// providers override built-in ones with the same name.
+    ///
+    /// # Returns
+    ///
+    /// The merged configuration.
+    #[must_use]
+    pub fn load() -> Self {
+        let mut config = Self::default();
+
+        if let Some(user_config_path) = Self::get_config_path()
+            && let Ok(content) = std::fs::read_to_string(&user_config_path)
+                && let Ok(user_config) = toml::from_str::<AppConfig>(&content) {
+                    for (name, provider) in user_config.model_providers {
+                        config.model_providers.insert(name, provider);
+                    }
+                    config.general = user_config.general;
+                }
+
+        config
+    }
+
+    /// Get the configuration file path.
+    ///
+    /// Follows XDG Base Directory specification:
+    /// - `$XDG_CONFIG_HOME/neco/config.toml` (if XDG_CONFIG_HOME is set)
+    /// - `~/.config/neco/config.toml` (default)
+    ///
+    /// # Returns
+    ///
+    /// The path to the configuration file, or `None` if home directory cannot be determined.
+    fn get_config_path() -> Option<PathBuf> {
+        let config_dir = dirs::config_dir().map(|p| p.join("neco"));
+
+        if let Some(ref dir) = config_dir {
+            return Some(dir.join("config.toml"));
+        }
+
+        None
+    }
+}
+
+/// General application configuration.
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct GeneralConfig {
+    /// Currently active provider (optional, defaults to auto-detection)
+    pub active_provider: Option<String>,
+}
+
+/// Provider configuration loaded from file.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProviderConfigFile {
+    /// Provider display name
+    pub display_name: Option<String>,
+    /// API base URL
+    pub base_url: Option<String>,
+    /// API key environment variable name (required)
+    pub api_key_env: String,
+    /// Fallback API key environment variable name (optional)
+    pub api_key_env_fallback: Option<String>,
+    /// Default model
+    pub default_model: Option<String>,
+    /// Model environment variable name
+    pub model_env: Option<String>,
+    /// Base URL environment variable name (overrides base_url if set)
+    pub base_url_env: Option<String>,
+}
 
 /// Application configuration read from environment variables.
 #[derive(Debug, Clone)]
@@ -21,7 +148,8 @@ impl Config {
     /// Returns the configuration with defaults applied.
     #[must_use]
     pub fn from_env() -> Self {
-        let cwd = env::current_dir().map_or_else(|_| ".".to_string(), |p| p.display().to_string());
+        let cwd =
+            std::env::current_dir().map_or_else(|_| ".".to_string(), |p| p.display().to_string());
 
         Self { cwd }
     }
@@ -30,5 +158,57 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self::from_env()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_config_default() {
+        let config = AppConfig::default();
+        assert!(config.model_providers.contains_key("anthropic"));
+        assert!(config.model_providers.contains_key("zhipuai"));
+    }
+
+    #[test]
+    fn test_provider_config_file_anthropic() {
+        let provider = AppConfig::default()
+            .model_providers
+            .get("anthropic")
+            .cloned()
+            .unwrap();
+
+        assert_eq!(provider.api_key_env, "ANTHROPIC_AUTH_TOKEN");
+        assert_eq!(
+            provider.api_key_env_fallback,
+            Some("ANTHROPIC_API_KEY".to_string())
+        );
+        assert_eq!(
+            provider.base_url,
+            Some("https://api.anthropic.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_provider_config_file_zhipuai() {
+        let provider = AppConfig::default()
+            .model_providers
+            .get("zhipuai")
+            .cloned()
+            .unwrap();
+
+        assert_eq!(provider.api_key_env, "ZHIPU_API_KEY");
+        assert_eq!(
+            provider.base_url,
+            Some("https://open.bigmodel.cn/api/anthropic".to_string())
+        );
+    }
+
+    #[test]
+    fn test_config_from_env() {
+        let config = Config::from_env();
+        assert!(!config.cwd.is_empty());
     }
 }
