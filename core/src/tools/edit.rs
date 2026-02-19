@@ -1,7 +1,11 @@
 //! File editing tool with string replacement.
 
 use anyhow::{Context, Result};
+use async_trait::async_trait;
+use serde_json::Value;
 use tokio::fs;
+
+use crate::tools::Tool;
 
 /// Edit file by replacing old string with new string.
 ///
@@ -44,4 +48,60 @@ pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> R
         .with_context(|| format!("Failed to write file: {path}"))?;
 
     Ok("ok".to_string())
+}
+
+/// Edit tool wrapper.
+pub struct EditTool;
+
+#[async_trait]
+impl Tool for EditTool {
+    fn name(&self) -> &str {
+        "edit"
+    }
+
+    fn description(&self) -> &str {
+        "Edit a file by replacing old string with new string. This tool will replace the first occurrence of the old string with the new string. If there are multiple occurrences of the old string, you must either make the old string more specific to match only once, or set all=true to replace all occurrences. This tool is useful for making small changes to files without rewriting the entire file."
+    }
+
+    fn input_schema(&self) -> Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The absolute or relative path to the file to edit"
+                },
+                "old": {
+                    "type": "string",
+                    "description": "The string to replace. To be successfully replaced, the old string must be unique and must match exactly (including whitespace and indentation)"
+                },
+                "new": {
+                    "type": "string",
+                    "description": "The new string to replace the old string with"
+                },
+                "all": {
+                    "type": "boolean",
+                    "description": "If true, replace all occurrences of the old string with the new string. If false (default), only replace the first occurrence. Use this only when you want to replace all occurrences."
+                }
+            },
+            "required": ["path", "old", "new"]
+        })
+    }
+
+    async fn execute(&self, input: &Value) -> Result<String> {
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing path"))?;
+        let old = input
+            .get("old")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing old"))?;
+        let new = input
+            .get("new")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing new"))?;
+        let all = input.get("all").and_then(serde_json::Value::as_bool);
+        edit_tool(path, old, new, all).await
+    }
 }
