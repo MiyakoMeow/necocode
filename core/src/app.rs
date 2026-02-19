@@ -22,7 +22,7 @@ use tokio::task::JoinHandle;
 /// # fn main() -> anyhow::Result<()> {
 /// let rt = tokio::runtime::Runtime::new()?;
 /// let (provider_config, config) = rt.block_on(async {
-///     let provider_config = ProviderConfig::from_env_with_validation().await;
+///     let provider_config = ProviderConfig::from_env().await;
 ///     let config = Config::from_env();
 ///     (provider_config, config)
 /// });
@@ -111,6 +111,7 @@ impl App {
     /// * `config` - Application configuration
     /// * `input_receiver` - Channel for receiving user input
     /// * `message` - Optional single message to process (non-interactive mode)
+    /// * `model_arg` - Optional model specification (e.g., "provider/model" or "model")
     ///
     /// # Returns
     ///
@@ -126,6 +127,7 @@ impl App {
         config: Config,
         input_receiver: mpsc::UnboundedReceiver<String>,
         message: Option<String>,
+        model_arg: Option<String>,
         rt: &tokio::runtime::Runtime,
     ) -> Result<(
         mpsc::UnboundedReceiver<CoreEvent>,
@@ -133,7 +135,11 @@ impl App {
         ProviderConfig,
     )> {
         let (event_receiver, handle, provider_config) = rt.block_on(async move {
-            let provider_config = ProviderConfig::from_env_with_validation().await;
+            let provider_config = if let Some(model_str) = model_arg {
+                ProviderConfig::from_model_string(&model_str).await?
+            } else {
+                ProviderConfig::from_env().await
+            };
             let (event_sender, event_receiver) = mpsc::unbounded_channel();
             let mut app = Self::new_internal(provider_config.clone(), config, event_sender);
 
@@ -368,7 +374,7 @@ mod tests {
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env_with_validation().await;
+        let provider_config = ProviderConfig::from_env().await;
         let config = Config::from_env();
         let app = App::new(provider_config, config);
 
@@ -383,7 +389,7 @@ mod tests {
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env_with_validation().await;
+        let provider_config = ProviderConfig::from_env().await;
         let config = Config::from_env();
         let mut app = App::new(provider_config, config).unwrap();
 
@@ -400,7 +406,7 @@ mod tests {
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env_with_validation().await;
+        let provider_config = ProviderConfig::from_env().await;
         let config = Config::from_env();
         let app = App::new(provider_config, config).unwrap();
 

@@ -6,13 +6,10 @@ pub mod anthropic;
 
 pub use crate::config::ProviderConfig;
 
-use crate::api::anthropic::models::{
-    ModelPreference, fetch_available_models, recommend_model, validate_model,
-};
 use crate::config::{AppConfig, ProviderConfigFile};
+use anyhow::Result;
 use async_trait::async_trait;
 use indexmap::IndexMap;
-use reqwest::Client as HttpClient;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -30,17 +27,159 @@ pub trait Provider: Send + Sync {
 
     /// Load configuration from environment variables.
     fn load_config(&self) -> ProviderConfig;
-
-    /// Validate and recommend model (async).
-    async fn validate_and_recommend_model(
-        &self,
-        current_model: &str,
-        validate: bool,
-        preference: Option<ModelPreference>,
-    ) -> String;
 }
 
 impl ProviderConfig {
+    /// Parse boolean environment variable with default.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Environment variable name
+    /// * `default` - Default value if variable is not set or invalid
+    ///
+    /// # Returns
+    ///
+    /// The parsed boolean value or default.
+    fn parse_env_bool(key: &str, default: bool) -> bool {
+        std::env::var(key)
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(default)
+    }
+
+    /// Load and validate provider configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `provider` - The provider to load from
+    /// * `provider_name` - Provider name for error messages
+    /// * `provider_file` - Provider file configuration
+    /// * `validate` - Whether to validate API key presence
+    ///
+    /// # Errors
+    ///
+    /// Returns error if API key is missing and validate is true.
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration.
+    fn load_and_validate_config(
+        provider: &Arc<dyn Provider>,
+        provider_name: &str,
+        provider_file: &ProviderConfigFile,
+        validate: bool,
+    ) -> Result<Self> {
+        let config = provider.load_config();
+
+        if validate && config.api_key.is_empty() {
+            let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
+
+            return Err(anyhow::anyhow!(
+                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
+                provider_name,
+                env_var
+            ));
+        }
+
+        Ok(config)
+    }
+
+    /// Parse model string and create ProviderConfig.
+    ///
+    /// # Arguments
+    ///
+    /// * `model_str` - Model specification in either "provider/model" or "model" format
+    ///
+    /// # Examples
+    ///
+    /// * "zhipuai/glm-4.7" → uses zhipuai provider with glm-4.7 model
+    /// * "glm-4.7" → uses default model provider (configured or "anthropic") with glm-4.7 model
+    ///
+    /// # Errors
+    ///
+    /// Returns error if provider is not found or API key is missing.
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration with the specified model.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use neco_core::ProviderConfig;
+    /// # async fn test() -> anyhow::Result<()> {
+    /// let config = ProviderConfig::from_model_string("zhipuai/glm-4.7").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn from_model_string(model_str: &str) -> Result<Self> {
+        let app_config = AppConfig::load();
+
+        let (provider_name, model) = if model_str.contains('/') {
+            let parts: Vec<&str> = model_str.splitn(2, '/').collect();
+            (parts[0], parts[1])
+        } else {
+            (app_config.get_default_model_provider(), model_str)
+        };
+
+        let provider_file = app_config
+            .get_provider_config(provider_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+            })?;
+
+        let provider = Arc::new(ConfigFileProvider::new(
+            provider_name.to_string(),
+            provider_file.clone(),
+        )) as Arc<dyn Provider>;
+
+        let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
+        let mut config = Self::load_and_validate_config(
+            &provider,
+            provider_name,
+            provider_file,
+            should_validate,
+        )?;
+
+        config.model = model.to_string();
+
+        Ok(config)
+    }
+
+    /// Load configuration from environment with validation.
+    ///
+    /// This method automatically detects available providers and loads their configuration
+    /// with optional API key validation based on the `NEOCODE_VALIDATE_MODEL` environment variable.
+    /// Provider detection follows the registration order in the registry.
+    ///
+    /// # Environment Variables
+    ///
+    /// * `NEOCODE_VALIDATE_MODEL` - Set to "false" to skip API key validation (default: true)
+    ///
+    /// # Returns
+    ///
+    /// The provider configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if provider detection fails or API key validation fails.
+    pub async fn from_env_with_validation() -> Result<Self> {
+        let registry = ProviderRegistry::global().read().await;
+        let provider = registry.detect_provider().await;
+        drop(registry);
+
+        let provider_name = provider.name();
+        let app_config = AppConfig::load();
+        let provider_file = app_config
+            .get_provider_config(provider_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+            })?;
+
+        let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
+        Self::load_and_validate_config(&provider, provider_name, provider_file, should_validate)
+    }
+
     /// Load configuration from environment with automatic provider detection.
     ///
     /// This method automatically detects available providers and loads their configuration.
@@ -48,31 +187,13 @@ impl ProviderConfig {
     ///
     /// # Returns
     ///
-    /// The provider configuration with model validation if enabled.
-    pub async fn from_env_with_validation() -> Self {
+    /// The provider configuration.
+    pub async fn from_env() -> Self {
         let registry = ProviderRegistry::global().read().await;
         let provider = registry.detect_provider().await;
         drop(registry);
 
-        let should_validate = std::env::var("NEOCODE_VALIDATE_MODEL")
-            .ok()
-            .and_then(|v| v.parse::<bool>().ok())
-            .unwrap_or(false);
-
-        let preference = match std::env::var("NEOCODE_MODEL_PREFERENCE").as_deref() {
-            Ok("opus") => Some(ModelPreference::Opus),
-            Ok("sonnet") => Some(ModelPreference::Sonnet),
-            Ok("haiku") => Some(ModelPreference::Haiku),
-            _ => None,
-        };
-
-        let mut config = provider.load_config();
-
-        config.model = provider
-            .validate_and_recommend_model(&config.model, should_validate, preference)
-            .await;
-
-        config
+        provider.load_config()
     }
 }
 
@@ -137,37 +258,6 @@ impl Provider for ConfigFileProvider {
             base_url,
             model,
             api_key,
-        }
-    }
-
-    async fn validate_and_recommend_model(
-        &self,
-        current_model: &str,
-        validate: bool,
-        preference: Option<ModelPreference>,
-    ) -> String {
-        if !validate {
-            return current_model.to_string();
-        }
-
-        let config = self.load_config();
-        let http_client = HttpClient::new();
-
-        match fetch_available_models(&http_client, &config.base_url, &config.api_key).await {
-            Ok(available_models) => {
-                if current_model.is_empty() || !validate_model(current_model, &available_models) {
-                    if let Some(recommended) = recommend_model(&available_models, preference) {
-                        eprintln!("🤖 Auto-selected model: {}", recommended);
-                        recommended
-                    } else {
-                        current_model.to_string()
-                    }
-                } else {
-                    eprintln!("✓ Model validated: {}", current_model);
-                    current_model.to_string()
-                }
-            }
-            Err(_) => current_model.to_string(),
         }
     }
 }
@@ -278,24 +368,31 @@ impl ProviderRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[tokio::test]
-    async fn test_provider_registry() {
-        let mut registry = ProviderRegistry::new();
+    #[serial]
+    async fn test_from_model_string_missing_api_key() {
+        let original_key = std::env::var("ANTHROPIC_AUTH_TOKEN").ok();
 
-        let provider = Arc::new(ConfigFileProvider::new(
-            "test".to_string(),
-            ProviderConfigFile {
-                base_url: Some("https://api.test.com".to_string()),
-                api_key: None,
-                api_key_env: Some("TEST_API_KEY".to_string()),
-                default_model: Some("test-model".to_string()),
-            },
-        ));
+        unsafe {
+            std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        }
 
-        registry.register(provider.clone());
+        let result =
+            ProviderConfig::from_model_string("anthropic/claude-3-5-sonnet-20241022").await;
 
-        assert!(registry.get_provider("test").is_some());
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("API key is missing"));
+        assert!(err_msg.contains("anthropic"));
+        assert!(err_msg.contains("ANTHROPIC_AUTH_TOKEN"));
+
+        if let Some(key) = original_key {
+            unsafe {
+                std::env::set_var("ANTHROPIC_AUTH_TOKEN", key);
+            }
+        }
     }
 
     #[test]

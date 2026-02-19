@@ -35,6 +35,10 @@ struct CliArgs {
     /// Send message directly and execute (non-interactive mode)
     #[arg(short = 'm', long = "message")]
     message: Option<String>,
+
+    /// Model specification (e.g., "anthropic/claude-opus-4-5" or "claude-sonnet-4-5")
+    #[arg(short = 'M', long = "model")]
+    model: Option<String>,
 }
 
 /// Async task to handle core events (rendering logic)
@@ -96,14 +100,19 @@ fn main() -> ExitCode {
 
     let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-    let (event_receiver, main_handle, provider_config) =
-        match App::run(config, input_receiver, args.message.clone(), &rt) {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("{} Failed to start: {}", "❌".red(), e);
-                return ExitCode::FAILURE;
-            }
-        };
+    let (event_receiver, main_handle, provider_config) = match App::run(
+        config,
+        input_receiver,
+        args.message.clone(),
+        args.model.clone(),
+        &rt,
+    ) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("{} Failed to start: {}", "❌".red(), e);
+            return ExitCode::FAILURE;
+        }
+    };
 
     println!(
         "{} | {} | {} | {}\n",
