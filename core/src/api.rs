@@ -74,8 +74,6 @@ impl ProviderConfig {
 
         config
     }
-
-
 }
 
 /// Provider loaded from configuration file.
