@@ -34,34 +34,34 @@ indexmap = { version = "2", features = ["serde"] }
 lto = "thin"
 
 [workspace.lints.rust]
-missing_docs = "deny"
-unused_crate_dependencies = "deny"
-unused_extern_crates = "deny"
+missing_docs = "forbid"
+unused_crate_dependencies = "forbid"
+unused_extern_crates = "forbid"
 
 [workspace.lints.rustdoc]
-broken_intra_doc_links = "deny"
-private_doc_tests = "deny"
-invalid_html_tags = "deny"
-bare_urls = "deny"
+broken_intra_doc_links = "forbid"
+private_doc_tests = "forbid"
+invalid_html_tags = "forbid"
+bare_urls = "forbid"
 
 [workspace.lints.clippy]
-pedantic = "deny"
+pedantic = "forbid"
 
-missing_docs_in_private_items = "deny"
+missing_docs_in_private_items = "forbid"
 
-module_name_repetitions = "deny"
-missing_errors_doc = "deny"
-must_use_candidate = "deny"
-mod_module_files = "deny"
+module_name_repetitions = "forbid"
+missing_errors_doc = "forbid"
+must_use_candidate = "forbid"
+mod_module_files = "forbid"
 
-indexing_slicing = "deny"
-panic = "deny"
-unwrap_used = "deny"
-expect_used = "deny"
-todo = "deny"
-unimplemented = "deny"
-unreachable = "deny"
-panic_in_result_fn = "deny"
+indexing_slicing = "forbid"
+panic = "forbid"
+unwrap_used = "forbid"
+expect_used = "forbid"
+todo = "forbid"
+unimplemented = "forbid"
+unreachable = "forbid"
+panic_in_result_fn = "forbid"
 
-print_stderr = "deny"
-print_stdout = "deny"
+print_stderr = "forbid"
+print_stdout = "forbid"
