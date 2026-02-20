@@ -11,6 +11,8 @@ remove_nested_parens = true
 
 # 格式化风格
 force_explicit_abi = true
+use_field_init_shorthand = true
+match_arm_leading_pipes = "Never"
 
 # 版本
 edition = "2024"
