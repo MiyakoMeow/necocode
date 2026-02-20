@@ -92,7 +92,10 @@ pub async fn fetch_available_models(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error response".to_string());
         return Err(ApiError::HttpError {
             status: status.as_u16(),
             message: error_text,
@@ -170,7 +173,7 @@ pub fn validate_model(model_id: &str, available_models: &[ModelInfo]) -> bool {
 fn get_cache_path() -> PathBuf {
     #[cfg(unix)]
     {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let home = std::env::var("HOME").unwrap_or(".".to_string());
         PathBuf::from(home)
             .join(".cache")
             .join("neco")
@@ -179,8 +182,8 @@ fn get_cache_path() -> PathBuf {
     #[cfg(windows)]
     {
         let home = std::env::var("USERPROFILE")
-            .or_else(|_| std::env::var("HOME"))
-            .unwrap_or_else(|_| ".".to_string());
+            .or(std::env::var("HOME"))
+            .unwrap_or(".".to_string());
         PathBuf::from(home)
             .join(".cache")
             .join("neco")
@@ -204,7 +207,8 @@ fn load_cached_models() -> Result<ModelsCache, Box<dyn std::error::Error>> {
 fn is_cache_valid(cache: &ModelsCache) -> bool {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .map_err(|_| anyhow::anyhow!("System time is before UNIX_EPOCH"))
+        .unwrap_or_default()
         .as_secs();
     let cache_age = now.saturating_sub(cache.cached_at);
     cache_age < 24 * 60 * 60 // 24 hours
@@ -217,15 +221,27 @@ fn save_models_to_cache(models: &[ModelInfo]) {
         let _ = std::fs::create_dir_all(parent);
     }
 
-    let cache = ModelsCache {
-        models: models.to_vec(),
-        cached_at: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
+    let cached_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs(),
+        Err(_) => {
+            eprintln!("System time is before UNIX_EPOCH");
+            return;
+        }
     };
 
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(&cache).unwrap());
+    let cache = ModelsCache {
+        models: models.to_vec(),
+        cached_at,
+    };
+
+    let serialized = match serde_json::to_string_pretty(&cache) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to serialize models cache: {}", e);
+            return;
+        }
+    };
+    let _ = std::fs::write(&path, serialized);
 }
 
 #[cfg(test)]

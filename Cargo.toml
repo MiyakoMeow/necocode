@@ -1,6 +1,6 @@
 [workspace]
 members = ["core", "tui"]
-default-members = ["tui"]
+default-members = ["core", "tui"]
 resolver = "3"
 
 [workspace.package]
@@ -58,6 +58,10 @@ indexing_slicing = "deny"
 panic = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+panic_in_result_fn = "deny"
 
 print_stderr = "deny"
 print_stdout = "deny"

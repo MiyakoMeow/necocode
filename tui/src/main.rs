@@ -2,6 +2,7 @@
 
 // CLI application - only responsible for rendering and user interaction
 
+use anyhow::Context;
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
 use std::io::{self, BufRead, Write};
@@ -42,12 +43,14 @@ struct CliArgs {
 }
 
 /// Async task to handle core events (rendering logic)
-async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
+async fn handle_core_events(
+    mut receiver: mpsc::UnboundedReceiver<CoreEvent>,
+) -> anyhow::Result<()> {
     while let Some(event) = receiver.recv().await {
         match event {
             CoreEvent::TextDelta(text) => {
                 print!("{}", text);
-                io::stdout().flush().unwrap();
+                io::stdout().flush().context("Failed to flush stdout")?;
             }
             CoreEvent::ToolCallStart { id, name } => {
                 tracing::debug!(tool = %name, tool_id = %id, "Tool call started");
@@ -82,8 +85,9 @@ async fn handle_core_events(mut receiver: mpsc::UnboundedReceiver<CoreEvent>) {
                 print!("{}", separator());
             }
         }
-        io::stdout().flush().unwrap();
+        io::stdout().flush().context("Failed to flush stdout")?;
     }
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -91,8 +95,16 @@ fn main() -> ExitCode {
     let config = Config::from_env();
     let _logging_enabled = setup_logging(&config);
 
+    if let Err(e) = run(args, config) {
+        eprintln!("{} Error: {}", "❌".red(), e);
+        return ExitCode::FAILURE;
+    }
+    ExitCode::SUCCESS
+}
+
+fn run(args: CliArgs, config: Config) -> anyhow::Result<ExitCode> {
     // Initialize provider registry at startup
-    let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
     rt.block_on(async {
         let mut registry = ProviderRegistry::global().write().await;
         registry.register_defaults().await;
@@ -100,19 +112,14 @@ fn main() -> ExitCode {
 
     let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-    let (event_receiver, main_handle, provider_config) = match App::run(
+    let (event_receiver, main_handle, provider_config) = App::run(
         config,
         input_receiver,
         args.message.clone(),
         args.model.clone(),
         &rt,
-    ) {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("{} Failed to start: {}", "❌".red(), e);
-            return ExitCode::FAILURE;
-        }
-    };
+    )
+    .context("Failed to start application")?;
 
     println!(
         "{} | {} | {} | {}\n",
@@ -123,7 +130,9 @@ fn main() -> ExitCode {
     );
 
     let render_handle = rt.spawn(async move {
-        handle_core_events(event_receiver).await;
+        if let Err(e) = handle_core_events(event_receiver).await {
+            eprintln!("{} Render error: {}", "❌".red(), e);
+        }
     });
 
     if args.message.is_none() {
@@ -140,14 +149,14 @@ fn main() -> ExitCode {
         }
     }
 
-    match rt.block_on(async {
+    let result = rt.block_on(async {
         let _ = render_handle.await;
-        main_handle.await.unwrap()
-    }) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("{} Error: {}", "❌".red(), e);
-            ExitCode::FAILURE
+        match main_handle.await {
+            Ok(result) => result,
+            Err(e) => Err(anyhow::anyhow!("Main task failed: {}", e)),
         }
-    }
+    });
+
+    result.context("Application execution failed")?;
+    Ok(ExitCode::SUCCESS)
 }

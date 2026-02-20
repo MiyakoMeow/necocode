@@ -70,7 +70,7 @@ impl Session {
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let (event_sender, _) = mpsc::unbounded_channel();
-    /// let config = ProviderConfig::from_env().await;
+    /// let config = ProviderConfig::from_env().await?;
     /// let mut session = Session::new(config, "/path".to_string());
     /// let reader = StdinInputReader;
     ///
@@ -270,12 +270,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_session_clear_history() {
+    async fn test_session_clear_history() -> anyhow::Result<()> {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults().await;
         drop(registry);
 
-        let config = ProviderConfig::from_env().await;
+        let config = ProviderConfig::from_env().await?;
         let mut session = Session::new(config, "/test".to_string());
 
         session
@@ -285,19 +285,21 @@ mod tests {
 
         session.clear_history();
         assert!(session.messages.is_empty());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_session_new() {
+    async fn test_session_new() -> anyhow::Result<()> {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults().await;
         drop(registry);
 
-        let config = ProviderConfig::from_env().await;
+        let config = ProviderConfig::from_env().await?;
         let session = Session::new(config, "/test".to_string());
 
         assert!(session.messages.is_empty());
         assert!(!session.system_prompt.is_empty());
         assert!(!session.schema.is_empty());
+        Ok(())
     }
 }
