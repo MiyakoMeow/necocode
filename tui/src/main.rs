@@ -10,12 +10,17 @@ use std::path::Path;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
-use neco::separator;
+// CLI utility modules
+mod colors;
+mod logging;
+mod separator;
+
+// Re-export commonly used items
+pub use colors::*;
+pub use separator::separator;
 
 // Use core library modules
 use neco_core::{App, Config, CoreEvent, ProviderRegistry};
-
-mod logging;
 
 /// Initialize the logging system, returns success status
 fn setup_logging(config: &Config) -> bool {
