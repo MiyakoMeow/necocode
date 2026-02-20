@@ -39,10 +39,10 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
                             });
                     files.push((path, mtime));
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("Glob error: {e}");
-            }
+            },
         }
     }
 

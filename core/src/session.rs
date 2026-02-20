@@ -226,7 +226,7 @@ impl Session {
                 self.clear_history();
                 let _ = event_sender.send(CoreEvent::Error("Conversation cleared".to_string()));
                 Ok(true)
-            }
+            },
             UserCommand::Message(msg) => {
                 // Add user message to history
                 self.messages.push(json!({
@@ -249,7 +249,7 @@ impl Session {
                 }
 
                 Ok(true)
-            }
+            },
         }
     }
 }

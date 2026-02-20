@@ -93,7 +93,7 @@ mod tests {
             CoreEvent::ToolCallStart { id, name } => {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
-            }
+            },
             _ => anyhow::bail!("Expected ToolCallStart variant"),
         }
         Ok(())
@@ -110,7 +110,7 @@ mod tests {
             CoreEvent::ToolResult { name, result } => {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
-            }
+            },
             _ => anyhow::bail!("Expected ToolResult variant"),
         }
         Ok(())
@@ -124,7 +124,7 @@ mod tests {
         match (original, cloned) {
             (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
                 assert_eq!(s1, s2);
-            }
+            },
             _ => anyhow::bail!("Expected TextDelta variant"),
         }
         Ok(())

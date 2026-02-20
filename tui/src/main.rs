@@ -25,7 +25,7 @@ fn setup_logging(config: &Config) -> bool {
         Err(e) => {
             eprintln!("Failed to initialize logging: {}", e);
             false
-        }
+        },
     }
 }
 
@@ -51,21 +51,21 @@ async fn handle_core_events(
             CoreEvent::TextDelta(text) => {
                 print!("{}", text);
                 io::stdout().flush().context("Failed to flush stdout")?;
-            }
+            },
             CoreEvent::ToolCallStart { id, name } => {
                 tracing::debug!(tool = %name, tool_id = %id, "Tool call started");
                 println!("\n🔧 {} (id: {})", name.yellow().bold(), id);
-            }
+            },
             CoreEvent::ToolExecuting { name } => {
                 tracing::info!(tool = %name, "Tool executing");
                 println!("{}⚙️ {} executing...", Attribute::Bold, name);
-            }
+            },
             CoreEvent::ToolResult { name, result } => {
                 tracing::debug!(tool = %name, result_len = result.len(), "Tool result received");
                 println!("\n📝 {} Result:", name.green().bold());
                 println!("{}", result);
                 print!("{}", separator());
-            }
+            },
             CoreEvent::Error(error) => {
                 if error.contains("Conversation cleared") {
                     println!("{}", "⏺ Cleared conversation".green());
@@ -74,16 +74,16 @@ async fn handle_core_events(
                     println!("\n{} Error: {}", "❌".red(), error);
                 }
                 print!("{}", separator());
-            }
+            },
             CoreEvent::MessageStart => {
                 tracing::debug!("Message started");
                 print!("{}", separator());
-            }
+            },
             CoreEvent::MessageStop => {
                 tracing::debug!("Message stopped");
                 println!();
                 print!("{}", separator());
-            }
+            },
         }
         io::stdout().flush().context("Failed to flush stdout")?;
     }
@@ -143,7 +143,7 @@ fn run(args: CliArgs, config: Config) -> anyhow::Result<ExitCode> {
                     if input_sender.send(input).is_err() {
                         break;
                     }
-                }
+                },
                 Err(_) => break,
             }
         }

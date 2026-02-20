@@ -133,13 +133,13 @@ pub fn recommend_model(
     let priority_models = match pref {
         ModelPreference::Opus => {
             vec!["claude-opus-4-6", "claude-opus-4-5", "claude-sonnet-4-5"]
-        }
+        },
         ModelPreference::Sonnet => {
             vec!["claude-sonnet-4-5", "claude-opus-4-6", "claude-haiku-4-5"]
-        }
+        },
         ModelPreference::Haiku => {
             vec!["claude-haiku-4-5", "claude-sonnet-4-5", "claude-opus-4-5"]
-        }
+        },
     };
 
     // Find first available model in priority list
@@ -226,7 +226,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
         Err(_) => {
             eprintln!("System time is before UNIX_EPOCH");
             return;
-        }
+        },
     };
 
     let cache = ModelsCache {
@@ -239,7 +239,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
         Err(e) => {
             eprintln!("Failed to serialize models cache: {}", e);
             return;
-        }
+        },
     };
     let _ = std::fs::write(&path, serialized);
 }
