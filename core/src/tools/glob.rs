@@ -103,6 +103,6 @@ impl Tool for GlobTool {
 
         tokio::task::spawn_blocking(move || glob_tool(&pat, path.as_deref()))
             .await
-            .map_err(|e| anyhow::anyhow!("Task join error: {e}"))?
+            .context("Task join error")?
     }
 }

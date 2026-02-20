@@ -8,7 +8,7 @@ use crate::command::UserCommand;
 use crate::config::ProviderConfig;
 use crate::events::CoreEvent;
 use crate::input::InputReader;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde_json::json;
 use tokio::sync::mpsc;
 
@@ -185,7 +185,7 @@ impl Session {
                 Some(event_sender),
             )
             .await
-            .map_err(|e| anyhow::anyhow!("Agent loop error: {}", e))
+            .context("Agent loop error")
     }
 
     /// Parse user input into a command.

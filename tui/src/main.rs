@@ -153,7 +153,7 @@ fn run(args: CliArgs, config: Config) -> anyhow::Result<ExitCode> {
         let _ = render_handle.await;
         match main_handle.await {
             Ok(result) => result,
-            Err(e) => Err(anyhow::anyhow!("Main task failed: {}", e)),
+            Err(e) => Err(e).context("Main task failed"),
         }
     });
 
