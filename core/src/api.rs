@@ -165,7 +165,7 @@ impl ProviderConfig {
     /// Returns error if provider detection fails or API key validation fails.
     pub async fn from_env_with_validation() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await;
+        let provider = registry.detect_provider().await?;
         drop(registry);
 
         let provider_name = provider.name();
@@ -188,12 +188,16 @@ impl ProviderConfig {
     /// # Returns
     ///
     /// The provider configuration.
-    pub async fn from_env() -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no providers are registered.
+    pub async fn from_env() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await;
+        let provider = registry.detect_provider().await?;
         drop(registry);
 
-        provider.load_config()
+        Ok(provider.load_config())
     }
 }
 
@@ -324,11 +328,15 @@ impl ProviderRegistry {
     ///
     /// # Returns
     ///
-    /// The detected provider, or the default provider if none are available.
-    pub async fn detect_provider(&self) -> Arc<dyn Provider> {
+    /// The detected provider.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no providers are registered.
+    pub async fn detect_provider(&self) -> Result<Arc<dyn Provider>, anyhow::Error> {
         for provider in self.providers.values() {
             if provider.is_available() {
-                return provider.clone();
+                return Ok(provider.clone());
             }
         }
 
@@ -337,7 +345,7 @@ impl ProviderRegistry {
             .and_then(|name| self.providers.get(name))
             .or_else(|| self.providers.values().next())
             .cloned()
-            .expect("No providers registered")
+            .ok_or_else(|| anyhow::anyhow!("No providers registered"))
     }
 
     /// Get a provider by name.

@@ -70,19 +70,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_core_event_serialization() {
+    fn test_core_event_serialization() -> anyhow::Result<()> {
         let event = CoreEvent::TextDelta("Hello, world!".to_string());
-        let serialized = serde_json::to_string(&event).unwrap();
-        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
+        let serialized = serde_json::to_string(&event)?;
+        let deserialized: CoreEvent = serde_json::from_str(&serialized)?;
 
         match deserialized {
             CoreEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
-            _ => panic!("Expected TextDelta variant"),
+            _ => anyhow::bail!("Expected TextDelta variant"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_core_event_tool_call_start() {
+    fn test_core_event_tool_call_start() -> anyhow::Result<()> {
         let event = CoreEvent::ToolCallStart {
             id: "test-id".to_string(),
             name: "test-tool".to_string(),
@@ -93,12 +94,13 @@ mod tests {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
             }
-            _ => panic!("Expected ToolCallStart variant"),
+            _ => anyhow::bail!("Expected ToolCallStart variant"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_core_event_tool_result() {
+    fn test_core_event_tool_result() -> anyhow::Result<()> {
         let event = CoreEvent::ToolResult {
             name: "read".to_string(),
             result: "File content".to_string(),
@@ -109,12 +111,13 @@ mod tests {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
             }
-            _ => panic!("Expected ToolResult variant"),
+            _ => anyhow::bail!("Expected ToolResult variant"),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_core_event_clone() {
+    fn test_core_event_clone() -> anyhow::Result<()> {
         let original = CoreEvent::TextDelta("test".to_string());
         let cloned = original.clone();
 
@@ -122,7 +125,8 @@ mod tests {
             (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
                 assert_eq!(s1, s2);
             }
-            _ => panic!("Expected TextDelta variant"),
+            _ => anyhow::bail!("Expected TextDelta variant"),
         }
+        Ok(())
     }
 }

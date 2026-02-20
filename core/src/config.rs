@@ -215,12 +215,12 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_file_anthropic() {
+    fn test_provider_config_file_anthropic() -> anyhow::Result<()> {
         let provider = AppConfig::default()
             .model_providers
             .get("anthropic")
             .cloned()
-            .unwrap();
+            .ok_or_else(|| anyhow::anyhow!("Provider not found"))?;
 
         assert_eq!(
             provider.api_key_env,
@@ -231,6 +231,7 @@ mod tests {
             provider.base_url,
             Some("https://api.anthropic.com".to_string())
         );
+        Ok(())
     }
 
     #[test]

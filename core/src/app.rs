@@ -22,14 +22,14 @@ use tokio::task::JoinHandle;
 /// # fn main() -> anyhow::Result<()> {
 /// let rt = tokio::runtime::Runtime::new()?;
 /// let (provider_config, config) = rt.block_on(async {
-///     let provider_config = ProviderConfig::from_env().await;
+///     let provider_config = ProviderConfig::from_env().await?;
 ///     let config = Config::from_env();
-///     (provider_config, config)
-/// });
+///     Ok::<_, anyhow::Error>((provider_config, config))
+/// })?;
 /// let mut app = App::new(provider_config, config)?;
 ///
 /// // Get event receiver for rendering
-/// let event_receiver = app.take_event_receiver();
+/// let event_receiver = app.take_event_receiver()?;
 ///
 /// // Run in interactive mode
 /// let reader = StdinInputReader;
@@ -138,7 +138,7 @@ impl App {
             let provider_config = if let Some(model_str) = model_arg {
                 ProviderConfig::from_model_string(&model_str).await?
             } else {
-                ProviderConfig::from_env().await
+                ProviderConfig::from_env().await?
             };
             let (event_sender, event_receiver) = mpsc::unbounded_channel();
             let mut app = Self::new_internal(provider_config.clone(), config, event_sender);
@@ -162,16 +162,15 @@ impl App {
     ///
     /// # Returns
     ///
-    /// Returns the event receiver if available, None if already taken.
+    /// Returns the event receiver if available.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if called more than once (event receiver can only be taken once).
-    #[must_use]
-    pub fn take_event_receiver(&mut self) -> mpsc::UnboundedReceiver<CoreEvent> {
+    /// Returns an error if the receiver has already been taken.
+    pub fn take_event_receiver(&mut self) -> Result<mpsc::UnboundedReceiver<CoreEvent>> {
         self.event_receiver
             .take()
-            .expect("Event receiver can only be taken once")
+            .ok_or_else(|| anyhow::anyhow!("Event receiver can only be taken once"))
     }
 
     /// Get a reference to the event receiver (without taking ownership).
@@ -369,49 +368,52 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_app_new() {
+    async fn test_app_new() -> anyhow::Result<()> {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await;
+        let provider_config = ProviderConfig::from_env().await?;
         let config = Config::from_env();
         let app = App::new(provider_config, config);
 
         assert!(app.is_ok());
-        let app = app.unwrap();
+        let app = app?;
         assert!(app.event_receiver().is_some());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_take_event_receiver() {
+    async fn test_app_take_event_receiver() -> anyhow::Result<()> {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await;
+        let provider_config = ProviderConfig::from_env().await?;
         let config = Config::from_env();
-        let mut app = App::new(provider_config, config).unwrap();
+        let mut app = App::new(provider_config, config)?;
 
         // First take should succeed
-        let _receiver1 = app.take_event_receiver();
+        let _receiver1 = app.take_event_receiver()?;
 
         // Second access should return None
         assert!(app.event_receiver().is_none());
+        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_session_access() {
+    async fn test_app_session_access() -> anyhow::Result<()> {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults().await;
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await;
+        let provider_config = ProviderConfig::from_env().await?;
         let config = Config::from_env();
-        let app = App::new(provider_config, config).unwrap();
+        let app = App::new(provider_config, config)?;
 
         // Should be able to access session
         let _session = app.session();
         let _config = app.config();
+        Ok(())
     }
 }

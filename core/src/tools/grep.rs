@@ -54,7 +54,7 @@ pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
         }
     })
     .await
-    .map_err(|e| anyhow::anyhow!("Task join error: {e}"))?
+    .context("Task join error")?
 }
 
 /// Grep tool wrapper.

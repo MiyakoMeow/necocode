@@ -1,0 +1,2 @@
+# Allow expect in tests
+allow-expect-in-tests = true
