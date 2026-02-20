@@ -328,7 +328,7 @@ impl App {
                     .event_sender
                     .send(CoreEvent::Error("Conversation cleared".to_string()));
                 Ok(true)
-            }
+            },
             UserCommand::Message(_msg) => {
                 if let Err(e) = self.session.run_agent_loop(&self.event_sender).await {
                     let _ = self
@@ -336,7 +336,7 @@ impl App {
                         .send(CoreEvent::Error(format!("Error: {}", e)));
                 }
                 Ok(true)
-            }
+            },
         }
     }
 

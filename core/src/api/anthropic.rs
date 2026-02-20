@@ -189,7 +189,7 @@ impl ToolCallCollector {
                         completed: false,
                     };
                 }
-            }
+            },
             StreamEvent::ContentBlockStart {
                 content_block: ContentBlock::Text { .. },
                 ..
@@ -197,7 +197,7 @@ impl ToolCallCollector {
             | StreamEvent::MessageStart
             | StreamEvent::MessageDelta
             | StreamEvent::MessageStop
-            | StreamEvent::Error { .. } => {} // These events don't need special handling
+            | StreamEvent::Error { .. } => {}, // These events don't need special handling
 
             StreamEvent::ContentBlockDelta { delta, index } => {
                 let Some(call) = self.calls.get_mut(*index as usize) else {
@@ -207,14 +207,14 @@ impl ToolCallCollector {
                     return;
                 };
                 call.input_buffer.push_str(partial_json);
-            }
+            },
 
             StreamEvent::ContentBlockStop { index } => {
                 let Some(call) = self.calls.get_mut(*index as usize) else {
                     return;
                 };
                 call.completed = true;
-            }
+            },
         }
     }
 
@@ -481,7 +481,7 @@ impl Client {
                             let _ = sender.send(events::CoreEvent::TextDelta(text.clone()));
                         }
                         current_text.push_str(text);
-                    }
+                    },
 
                     StreamEvent::ContentBlockStart {
                         content_block: ContentBlock::ToolUse { id, name, .. },
@@ -494,14 +494,14 @@ impl Client {
                                 name: name.clone(),
                             });
                         }
-                    }
+                    },
 
                     StreamEvent::Error { error } => {
                         // Send error event
                         if let Some(sender) = event_sender {
                             let _ = sender.send(events::CoreEvent::Error(error.to_string()));
                         }
-                    }
+                    },
 
                     StreamEvent::MessageStop => {
                         // Send message stop event
@@ -509,11 +509,11 @@ impl Client {
                             let _ = sender.send(events::CoreEvent::MessageStop);
                         }
                         break;
-                    }
+                    },
 
                     _ => {
                         // Other events don't need special handling
-                    }
+                    },
                 }
 
                 // Process event for tool collection after match
@@ -755,13 +755,13 @@ mod tests {
             Err(e) => {
                 eprintln!("Failed to deserialize text ContentBlock: {e}");
                 return;
-            }
+            },
         };
         match text {
             ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
             ContentBlock::ToolUse { .. } => {
                 unreachable!("Expected Text variant but got ToolUse in test")
-            }
+            },
         }
 
         let tool_json = json!({
@@ -775,16 +775,16 @@ mod tests {
             Err(e) => {
                 eprintln!("Failed to deserialize tool_use ContentBlock: {e}");
                 return;
-            }
+            },
         };
         match tool {
             ContentBlock::ToolUse { id, name, .. } => {
                 assert_eq!(id, "call_123");
                 assert_eq!(name, "read");
-            }
+            },
             ContentBlock::Text { .. } => {
                 unreachable!("Expected ToolUse variant but got Text in test")
-            }
+            },
         }
     }
 
@@ -796,13 +796,13 @@ mod tests {
             Err(e) => {
                 eprintln!("Failed to deserialize text_delta Delta: {e}");
                 return;
-            }
+            },
         };
         match delta {
             Delta::Text { text } => assert_eq!(text, "Hello"),
             Delta::InputJson { .. } => {
                 unreachable!("Expected Text variant but got InputJson in test")
-            }
+            },
         }
 
         let json_delta_json = json!({"type": "input_json_delta", "partial_json": "{}"});
@@ -811,13 +811,13 @@ mod tests {
             Err(e) => {
                 eprintln!("Failed to deserialize input_json_delta Delta: {e}");
                 return;
-            }
+            },
         };
         match delta {
             Delta::InputJson { partial_json } => assert_eq!(partial_json, "{}"),
             Delta::Text { .. } => {
                 unreachable!("Expected InputJson variant but got Text in test")
-            }
+            },
         }
     }
 }

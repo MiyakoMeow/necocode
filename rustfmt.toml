@@ -13,6 +13,7 @@ remove_nested_parens = true
 force_explicit_abi = true
 use_field_init_shorthand = true
 match_arm_leading_pipes = "Never"
+match_block_trailing_comma = true
 
 # 版本
 edition = "2024"
