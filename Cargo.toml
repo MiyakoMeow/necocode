@@ -77,3 +77,8 @@ panic_in_result_fn = "deny"
 
 print_stderr = "deny"
 print_stdout = "deny"
+
+# Assert-related lints
+assertions_on_constants = "deny"
+assertions_on_result_states = "deny"
+bool_assert_comparison = "deny"

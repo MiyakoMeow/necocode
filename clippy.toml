@@ -4,5 +4,8 @@ allow-expect-in-tests = true
 # Allow unwrap in tests
 allow-unwrap-in-tests = true
 
+# Allow print in tests
+allow-print-in-tests = true
+
 # Suppress too-many-lines for complex functions (agent loop, streaming, etc.)
 too-many-lines-threshold = 200
