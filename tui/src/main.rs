@@ -28,7 +28,7 @@ fn setup_logging(config: &Config) -> bool {
     match logging::init_logging(&log_dir) {
         Ok(()) => true,
         Err(e) => {
-            eprintln!("Failed to initialize logging: {}", e);
+            eprintln!("Failed to initialize logging: {e}");
             false
         },
     }
@@ -54,7 +54,7 @@ async fn handle_core_events(
     while let Some(event) = receiver.recv().await {
         match event {
             CoreEvent::TextDelta(text) => {
-                print!("{}", text);
+                print!("{text}");
                 io::stdout().flush().context("Failed to flush stdout")?;
             },
             CoreEvent::ToolCallStart { id, name } => {
@@ -68,7 +68,7 @@ async fn handle_core_events(
             CoreEvent::ToolResult { name, result } => {
                 tracing::debug!(tool = %name, result_len = result.len(), "Tool result received");
                 println!("\n📝 {} Result:", name.green().bold());
-                println!("{}", result);
+                println!("{result}");
                 print!("{}", separator());
             },
             CoreEvent::Error(error) => {

@@ -333,7 +333,7 @@ impl App {
                 if let Err(e) = self.session.run_agent_loop(&self.event_sender).await {
                     let _ = self
                         .event_sender
-                        .send(CoreEvent::Error(format!("Error: {}", e)));
+                        .send(CoreEvent::Error(format!("Error: {e}")));
                 }
                 Ok(true)
             },

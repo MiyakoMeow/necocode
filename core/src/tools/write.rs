@@ -30,11 +30,11 @@ pub struct WriteTool;
 
 #[async_trait]
 impl Tool for WriteTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "write"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Write content to a file. This tool will create the file if it does not exist, or overwrite the file if it already exists. This tool is useful for creating new files, modifying existing files, and saving code. Use this tool when you need to create or modify files in the codebase."
     }
 

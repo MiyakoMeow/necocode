@@ -55,11 +55,11 @@ pub struct EditTool;
 
 #[async_trait]
 impl Tool for EditTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "edit"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Edit a file by replacing old string with new string. This tool will replace the first occurrence of the old string with the new string. If there are multiple occurrences of the old string, you must either make the old string more specific to match only once, or set all=true to replace all occurrences. This tool is useful for making small changes to files without rewriting the entire file."
     }
 

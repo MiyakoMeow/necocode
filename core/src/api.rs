@@ -75,16 +75,14 @@ impl ProviderConfig {
             let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
 
             return Err(anyhow::anyhow!(
-                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
-                provider_name,
-                env_var
+                "API key is missing for provider '{provider_name}'. Set the {env_var} environment variable or configure api_key in config file"
             ));
         }
 
         Ok(config)
     }
 
-    /// Parse model string and create ProviderConfig.
+    /// Parse model string and create `ProviderConfig`.
     ///
     /// # Arguments
     ///
@@ -125,7 +123,7 @@ impl ProviderConfig {
         let provider_file = app_config
             .get_provider_config(provider_name)
             .ok_or_else(|| {
-                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+                anyhow::anyhow!("Provider '{provider_name}' not found in configuration")
             })?;
 
         let provider = Arc::new(ConfigFileProvider::new(
@@ -173,7 +171,7 @@ impl ProviderConfig {
         let provider_file = app_config
             .get_provider_config(provider_name)
             .ok_or_else(|| {
-                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+                anyhow::anyhow!("Provider '{provider_name}' not found in configuration")
             })?;
 
         let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
@@ -279,7 +277,7 @@ impl ProviderRegistry {
     ///
     /// # Returns
     ///
-    /// A reference to the global registry wrapped in a RwLock.
+    /// A reference to the global registry wrapped in a `RwLock`.
     pub fn global() -> &'static RwLock<Self> {
         use std::sync::OnceLock;
         static REGISTRY: OnceLock<RwLock<ProviderRegistry>> = OnceLock::new();

@@ -4,7 +4,7 @@
 //!
 //! This module defines the tool abstraction layer including:
 //! - Tool trait for uniform tool interface
-//! - ToolRegistry for centralized tool management
+//! - `ToolRegistry` for centralized tool management
 
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -37,7 +37,7 @@ pub use write::write_tool;
 /// Tool trait defining the interface for all tools.
 ///
 /// All tools must implement this trait to be registered and executed
-/// through the ToolRegistry.
+/// through the `ToolRegistry`.
 #[async_trait]
 pub trait Tool: Send + Sync {
     /// Returns the name of the tool.

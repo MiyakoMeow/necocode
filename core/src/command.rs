@@ -23,7 +23,7 @@ impl fmt::Display for UserCommand {
         match self {
             Self::Quit => write!(f, "quit"),
             Self::Clear => write!(f, "clear"),
-            Self::Message(msg) => write!(f, "message: {}", msg),
+            Self::Message(msg) => write!(f, "message: {msg}"),
         }
     }
 }

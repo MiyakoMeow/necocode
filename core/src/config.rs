@@ -76,7 +76,7 @@ impl AppConfig {
     /// Get the configuration file path.
     ///
     /// Follows XDG Base Directory specification:
-    /// - `$XDG_CONFIG_HOME/neco/config.toml` (if XDG_CONFIG_HOME is set)
+    /// - `$XDG_CONFIG_HOME/neco/config.toml` (if `XDG_CONFIG_HOME` is set)
     /// - `~/.config/neco/config.toml` (default)
     ///
     /// # Returns
@@ -128,7 +128,7 @@ pub struct ProviderConfigFile {
     pub base_url: Option<String>,
     /// API key (default value)
     pub api_key: Option<String>,
-    /// API key environment variable name (overrides api_key if set)
+    /// API key environment variable name (overrides `api_key` if set)
     pub api_key_env: Option<String>,
     /// Default model
     pub default_model: Option<String>,

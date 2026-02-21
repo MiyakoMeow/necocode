@@ -83,7 +83,7 @@ pub async fn fetch_available_models(
 
     // Fetch from API
     let response = client
-        .get(format!("{}/v1/models", base_url))
+        .get(format!("{base_url}/v1/models"))
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .send()
@@ -123,6 +123,7 @@ pub async fn fetch_available_models(
 /// # Returns
 ///
 /// The recommended model ID, or None if no models are available.
+#[must_use]
 pub fn recommend_model(
     available_models: &[ModelInfo],
     preference: Option<ModelPreference>,
@@ -163,6 +164,7 @@ pub fn recommend_model(
 /// # Returns
 ///
 /// true if the model exists, false otherwise.
+#[must_use]
 pub fn validate_model(model_id: &str, available_models: &[ModelInfo]) -> bool {
     available_models.iter().any(|m| m.id == model_id)
 }
@@ -221,12 +223,11 @@ fn save_models_to_cache(models: &[ModelInfo]) {
         let _ = std::fs::create_dir_all(parent);
     }
 
-    let cached_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(duration) => duration.as_secs(),
-        Err(_) => {
-            eprintln!("System time is before UNIX_EPOCH");
-            return;
-        },
+    let cached_at = if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
+        duration.as_secs()
+    } else {
+        eprintln!("System time is before UNIX_EPOCH");
+        return;
     };
 
     let cache = ModelsCache {
@@ -237,7 +238,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
     let serialized = match serde_json::to_string_pretty(&cache) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to serialize models cache: {}", e);
+            eprintln!("Failed to serialize models cache: {e}");
             return;
         },
     };

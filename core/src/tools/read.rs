@@ -44,11 +44,11 @@ pub struct ReadTool;
 
 #[async_trait]
 impl Tool for ReadTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "read"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Read a file or directory. If reading a directory, list the files in the directory. If reading a file, this tool will return the contents of the file as a string. This tool is useful for reading code, configuration files, documentation, and any other text-based files. The output includes line numbers to make it easy to reference specific lines."
     }
 

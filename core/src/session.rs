@@ -37,7 +37,7 @@ impl Session {
     #[must_use]
     pub fn new(config: ProviderConfig, cwd: String) -> Self {
         let client = Client::new(config);
-        let system_prompt = format!("Concise coding assistant. cwd: {}", cwd);
+        let system_prompt = format!("Concise coding assistant. cwd: {cwd}");
         let schema = crate::api::anthropic::schema::tool_schemas();
 
         Self {
@@ -245,7 +245,7 @@ impl Session {
                     )
                     .await
                 {
-                    let _ = event_sender.send(CoreEvent::Error(format!("Error: {}", e)));
+                    let _ = event_sender.send(CoreEvent::Error(format!("Error: {e}")));
                 }
 
                 Ok(true)

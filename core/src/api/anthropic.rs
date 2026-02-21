@@ -156,6 +156,7 @@ pub struct ToolCall {
 
 impl ToolCallCollector {
     /// Create a new tool call collector
+    #[must_use]
     pub fn new() -> Self {
         Self { calls: Vec::new() }
     }
@@ -219,6 +220,7 @@ impl ToolCallCollector {
     }
 
     /// Check if there are completed tool calls
+    #[must_use]
     pub fn has_completed_calls(&self) -> bool {
         self.calls.iter().any(|c| c.completed)
     }
@@ -241,6 +243,7 @@ impl ToolCallCollector {
     }
 
     /// Check if the collector is active (has pending tool calls)
+    #[must_use]
     pub fn is_active(&self) -> bool {
         !self.calls.is_empty()
     }
@@ -363,6 +366,7 @@ pub struct Client {
 
 impl Client {
     /// Create a new API client with the given configuration.
+    #[must_use]
     pub fn new(config: ProviderConfig) -> Self {
         Self {
             http_client: HttpClient::new(),
