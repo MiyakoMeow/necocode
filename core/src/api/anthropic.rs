@@ -5,7 +5,7 @@
 pub mod models;
 pub mod schema;
 
-use crate::config::ProviderConfig;
+use crate::config::ProviderSettings;
 use crate::events;
 use crate::tools;
 use anyhow::Result;
@@ -357,10 +357,9 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
 /// API client.
 pub struct Client {
     /// HTTP client for making API requests
-    #[allow(clippy::struct_field_names)]
-    http_client: HttpClient,
+    http: HttpClient,
     /// API configuration, contains key, base URL and other information
-    config: ProviderConfig,
+    config: ProviderSettings,
     /// Tool registry for executing tools
     tool_registry: Arc<tools::ToolRegistry>,
 }
@@ -368,9 +367,9 @@ pub struct Client {
 impl Client {
     /// Create a new API client with the given configuration.
     #[must_use]
-    pub fn new(config: ProviderConfig) -> Self {
+    pub fn new(config: ProviderSettings) -> Self {
         Self {
-            http_client: HttpClient::new(),
+            http: HttpClient::new(),
             config,
             tool_registry: Arc::new(tools::ToolRegistry::new()),
         }
@@ -400,7 +399,6 @@ impl Client {
         system_prompt: &str,
         tools: Option<&[Value]>,
     ) -> Result<EventStream, ApiError> {
-        // Build request body
         let mut request_body = json!({
             "model": self.config.model,
             "max_tokens": 8192,
@@ -409,16 +407,14 @@ impl Client {
             "stream": true,
         });
 
-        // Add tools (if any)
         if let Some(tools_value) = tools
             && let Some(body_obj) = request_body.as_object_mut()
         {
             body_obj.insert("tools".to_string(), json!(tools_value));
         }
 
-        // Send HTTP request
         let response = self
-            .http_client
+            .http
             .post(format!("{}/v1/messages", self.config.base_url))
             .header("x-api-key", &self.config.api_key)
             .header("anthropic-version", "2023-06-01")
@@ -461,7 +457,6 @@ impl Client {
     /// - API request fails
     /// - Tool execution fails
     /// - Response processing fails
-    #[allow(clippy::too_many_lines)]
     pub async fn run_agent_loop_stream(
         &self,
         messages: &mut Vec<Value>,
@@ -649,19 +644,13 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_content_block_deserialize() {
         let text_json = json!({"type": "text", "text": "Hello"});
-        let text: ContentBlock = match serde_json::from_value(text_json) {
-            Ok(t) => t,
-            Err(e) => {
-                panic!("Failed to deserialize text ContentBlock: {e}")
-            },
-        };
+        let text: ContentBlock = serde_json::from_value(text_json).unwrap();
         match text {
             ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
             ContentBlock::ToolUse { .. } => {
-                panic!("Expected Text variant but got ToolUse in test")
+                assert!(false, "Expected Text variant but got ToolUse in test");
             },
         }
 
@@ -671,51 +660,35 @@ mod tests {
             "name": "read",
             "input": {"path": "test.rs"}
         });
-        let tool: ContentBlock = match serde_json::from_value(tool_json) {
-            Ok(t) => t,
-            Err(e) => {
-                panic!("Failed to deserialize tool_use ContentBlock: {e}")
-            },
-        };
+        let tool: ContentBlock = serde_json::from_value(tool_json).unwrap();
         match tool {
             ContentBlock::ToolUse { id, name, .. } => {
                 assert_eq!(id, "call_123");
                 assert_eq!(name, "read");
             },
             ContentBlock::Text { .. } => {
-                panic!("Expected ToolUse variant but got Text in test")
+                assert!(false, "Expected ToolUse variant but got Text in test");
             },
         }
     }
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_delta_deserialize() {
         let text_delta_json = json!({"type": "text_delta", "text": "Hello"});
-        let delta: Delta = match serde_json::from_value(text_delta_json) {
-            Ok(d) => d,
-            Err(e) => {
-                panic!("Failed to deserialize text_delta Delta: {e}")
-            },
-        };
+        let delta: Delta = serde_json::from_value(text_delta_json).unwrap();
         match delta {
             Delta::Text { text } => assert_eq!(text, "Hello"),
             Delta::InputJson { .. } => {
-                panic!("Expected Text variant but got InputJson in test")
+                assert!(false, "Expected Text variant but got InputJson in test");
             },
         }
 
         let json_delta_json = json!({"type": "input_json_delta", "partial_json": "{}"});
-        let delta: Delta = match serde_json::from_value(json_delta_json) {
-            Ok(d) => d,
-            Err(e) => {
-                panic!("Failed to deserialize input_json_delta Delta: {e}")
-            },
-        };
+        let delta: Delta = serde_json::from_value(json_delta_json).unwrap();
         match delta {
             Delta::InputJson { partial_json } => assert_eq!(partial_json, "{}"),
             Delta::Text { .. } => {
-                panic!("Expected InputJson variant but got Text in test")
+                assert!(false, "Expected InputJson variant but got Text in test");
             },
         }
     }

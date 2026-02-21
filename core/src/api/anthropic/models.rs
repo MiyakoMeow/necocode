@@ -26,11 +26,6 @@ pub struct ModelInfo {
 struct ModelsListResponse {
     /// List of available models
     data: Vec<ModelInfo>,
-    /// Whether there are more results (for pagination).
-    ///
-    /// NOTE: Currently unused but kept for API compatibility and future use.
-    #[allow(dead_code)]
-    has_more: bool,
 }
 
 /// Cached models data with timestamp.
@@ -77,8 +72,7 @@ pub enum ModelPreference {
 /// - Network request fails
 /// - API returns non-success status
 /// - Response parsing fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn fetch_available_models(
+pub async fn fetch(
     client: &HttpClient,
     base_url: &str,
     api_key: &str,

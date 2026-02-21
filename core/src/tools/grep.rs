@@ -22,8 +22,7 @@ use crate::tools::Tool;
 /// Returns error if:
 /// - Regex pattern is invalid
 /// - Task spawn fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
+pub async fn grep(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".").to_string();
     let pattern =
         regex::Regex::new(pat).with_context(|| format!("Invalid regex pattern: {pat}"))?;
@@ -65,11 +64,10 @@ pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Grep tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct GrepTool;
+pub struct Grep;
 
 #[async_trait]
-impl Tool for GrepTool {
+impl Tool for Grep {
     fn name(&self) -> &'static str {
         "grep"
     }
@@ -101,6 +99,6 @@ impl Tool for GrepTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing pat"))?;
         let path = input.get("path").and_then(|v| v.as_str());
-        grep_tool(pat, path).await
+        grep(pat, path).await
     }
 }

@@ -25,8 +25,7 @@ use crate::tools::Tool;
 /// Returns error if:
 /// - File read fails
 /// - File write fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> Result<String> {
+pub async fn edit(path: &str, old: &str, new: &str, all: Option<bool>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("Failed to read file: {path}"))?;
@@ -58,11 +57,10 @@ pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> R
 }
 
 /// Edit tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct EditTool;
+pub struct Edit;
 
 #[async_trait]
-impl Tool for EditTool {
+impl Tool for Edit {
     fn name(&self) -> &'static str {
         "edit"
     }
@@ -110,6 +108,6 @@ impl Tool for EditTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing new"))?;
         let all = input.get("all").and_then(serde_json::Value::as_bool);
-        edit_tool(path, old, new, all).await
+        edit(path, old, new, all).await
     }
 }

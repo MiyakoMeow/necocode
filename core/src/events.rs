@@ -70,8 +70,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::panic)]
     fn test_core_event_serialization() {
         let event = CoreEvent::TextDelta("Hello, world!".to_string());
         let serialized = serde_json::to_string(&event).unwrap();
@@ -79,13 +77,11 @@ mod tests {
 
         match deserialized {
             CoreEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
-            _ => panic!("Wrong event type"),
+            _ => assert!(false, "Wrong event type"),
         }
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::panic)]
     fn test_core_event_tool_call_start() {
         let event = CoreEvent::ToolCallStart {
             id: "test-id".to_string(),
@@ -99,13 +95,11 @@ mod tests {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
             },
-            _ => panic!("Wrong event type"),
+            _ => assert!(false, "Wrong event type"),
         }
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::panic)]
     fn test_core_event_tool_result() {
         let event = CoreEvent::ToolResult {
             name: "read".to_string(),
@@ -119,13 +113,11 @@ mod tests {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
             },
-            _ => panic!("Wrong event type"),
+            _ => assert!(false, "Wrong event type"),
         }
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::panic)]
     fn test_core_event_clone() {
         let original = CoreEvent::TextDelta("test".to_string());
         let cloned = original.clone();
@@ -134,7 +126,7 @@ mod tests {
             (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
                 assert_eq!(s1, s2);
             },
-            _ => panic!("Wrong event type"),
+            _ => assert!(false, "Wrong event type"),
         }
     }
 }

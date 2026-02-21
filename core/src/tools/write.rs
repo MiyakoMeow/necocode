@@ -22,8 +22,7 @@ use crate::tools::Tool;
 ///
 /// Returns error if:
 /// - File write fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn write_tool(path: &str, content: &str) -> Result<String> {
+pub async fn write(path: &str, content: &str) -> Result<String> {
     fs::write(path, content)
         .await
         .with_context(|| format!("Failed to write file: {path}"))?;
@@ -32,11 +31,10 @@ pub async fn write_tool(path: &str, content: &str) -> Result<String> {
 }
 
 /// Write tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct WriteTool;
+pub struct Write;
 
 #[async_trait]
-impl Tool for WriteTool {
+impl Tool for Write {
     fn name(&self) -> &'static str {
         "write"
     }
@@ -71,6 +69,6 @@ impl Tool for WriteTool {
             .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
-        write_tool(path, content).await
+        write(path, content).await
     }
 }

@@ -6,8 +6,7 @@ use std::path::PathBuf;
 
 /// Application configuration file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[allow(clippy::module_name_repetitions)]
-pub struct AppConfig {
+pub struct Configuration {
     /// Default model provider (defaults to "anthropic")
     #[serde(default)]
     pub default_model_provider: Option<String>,
@@ -16,10 +15,10 @@ pub struct AppConfig {
     pub default_model: Option<String>,
     /// Provider configurations
     #[serde(default)]
-    pub model_providers: IndexMap<String, ProviderConfigFile>,
+    pub model_providers: IndexMap<String, FileProvider>,
 }
 
-impl Default for AppConfig {
+impl Default for Configuration {
     fn default() -> Self {
         Self {
             default_model_provider: None,
@@ -29,14 +28,14 @@ impl Default for AppConfig {
     }
 }
 
-impl AppConfig {
+impl Configuration {
     /// Get built-in provider configurations.
-    fn builtin_providers() -> IndexMap<String, ProviderConfigFile> {
+    fn builtin_providers() -> IndexMap<String, FileProvider> {
         let mut providers = IndexMap::new();
 
         providers.insert(
             "anthropic".to_string(),
-            ProviderConfigFile {
+            FileProvider {
                 base_url: Some("https://api.anthropic.com".to_string()),
                 api_key: None,
                 api_key_env: Some("ANTHROPIC_AUTH_TOKEN".to_string()),
@@ -62,7 +61,7 @@ impl AppConfig {
 
         if let Some(user_config_path) = Self::get_config_path()
             && let Ok(content) = std::fs::read_to_string(&user_config_path)
-            && let Ok(user_config) = toml::from_str::<AppConfig>(&content)
+            && let Ok(user_config) = toml::from_str::<Configuration>(&content)
         {
             for (name, provider) in user_config.model_providers {
                 config.model_providers.insert(name, provider);
@@ -117,14 +116,14 @@ impl AppConfig {
     ///
     /// The provider configuration if found, `None` otherwise.
     #[must_use]
-    pub fn get_provider_config(&self, name: &str) -> Option<&ProviderConfigFile> {
+    pub fn get_provider_config(&self, name: &str) -> Option<&FileProvider> {
         self.model_providers.get(name)
     }
 }
 
 /// Provider configuration loaded from file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProviderConfigFile {
+pub struct FileProvider {
     /// API base URL
     pub base_url: Option<String>,
     /// API key (default value)
@@ -144,8 +143,7 @@ pub struct Config {
 
 /// Provider configuration (unified for all providers).
 #[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub struct ProviderConfig {
+pub struct ProviderSettings {
     /// Provider name
     pub name: String,
     /// API base URL
@@ -156,7 +154,7 @@ pub struct ProviderConfig {
     pub api_key: String,
 }
 
-impl ProviderConfig {
+impl ProviderSettings {
     /// Get provider display name.
     #[must_use]
     pub fn provider_display_name(&self) -> &str {
@@ -211,19 +209,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_app_config_default() {
-        let config = AppConfig::default();
+    fn test_configuration_default() {
+        let config = Configuration::default();
         assert!(config.model_providers.contains_key("anthropic"));
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)]
-    fn test_provider_config_file_anthropic() {
-        let provider = AppConfig::default()
+    fn test_file_provider_anthropic() {
+        let Some(provider) = Configuration::default()
             .model_providers
             .get("anthropic")
             .cloned()
-            .unwrap();
+        else {
+            return;
+        };
 
         assert_eq!(
             provider.api_key_env,

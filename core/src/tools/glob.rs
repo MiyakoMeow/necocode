@@ -21,8 +21,7 @@ use crate::tools::Tool;
 /// # Errors
 ///
 /// Returns error if glob pattern is invalid.
-#[allow(clippy::module_name_repetitions)]
-pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
+pub fn glob(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".");
     let pattern = format!("{}/{}", base.replace('\\', "/"), pat).replace("//", "/");
 
@@ -52,7 +51,6 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
         }
     }
 
-    // Sort by modification time (newest first)
     files.sort_by(|a, b| b.1.cmp(&a.1));
 
     if files.is_empty() {
@@ -67,11 +65,10 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Glob tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct GlobTool;
+pub struct Glob;
 
 #[async_trait]
-impl Tool for GlobTool {
+impl Tool for Glob {
     fn name(&self) -> &'static str {
         "glob"
     }
@@ -108,7 +105,7 @@ impl Tool for GlobTool {
             .and_then(|v| v.as_str())
             .map(std::string::ToString::to_string);
 
-        tokio::task::spawn_blocking(move || glob_tool(&pat, path.as_deref()))
+        tokio::task::spawn_blocking(move || glob(&pat, path.as_deref()))
             .await
             .context("Task join error")?
     }

@@ -23,8 +23,7 @@ use crate::tools::Tool;
 ///
 /// Returns error if:
 /// - File read fails
-#[allow(clippy::module_name_repetitions)]
-pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String> {
+pub async fn read(path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("Failed to read file: {path}"))?;
@@ -46,11 +45,10 @@ pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) 
 }
 
 /// Read tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct ReadTool;
+pub struct Read;
 
 #[async_trait]
-impl Tool for ReadTool {
+impl Tool for Read {
     fn name(&self) -> &'static str {
         "read"
     }
@@ -93,6 +91,6 @@ impl Tool for ReadTool {
             .get("limit")
             .and_then(serde_json::Value::as_i64)
             .and_then(|v| usize::try_from(v).ok());
-        read_tool(path, offset, limit).await
+        read(path, offset, limit).await
     }
 }

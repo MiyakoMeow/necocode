@@ -20,19 +20,12 @@ pub mod grep;
 pub mod read;
 pub mod write;
 
-pub use bash::BashTool;
-pub use edit::EditTool;
-pub use glob::GlobTool;
-pub use grep::GrepTool;
-pub use read::ReadTool;
-pub use write::WriteTool;
-
-pub use bash::bash_tool;
-pub use edit::edit_tool;
-pub use glob::glob_tool;
-pub use grep::grep_tool;
-pub use read::read_tool;
-pub use write::write_tool;
+pub use bash::{Bash, bash};
+pub use edit::{Edit, edit};
+pub use glob::{Glob, glob};
+pub use grep::{Grep, grep};
+pub use read::{Read, read};
+pub use write::{Write, write};
 
 /// Tool trait defining the interface for all tools.
 ///
@@ -83,12 +76,12 @@ impl ToolRegistry {
 
     /// Register all default tools.
     fn register_all(&mut self) {
-        self.register(Arc::new(ReadTool));
-        self.register(Arc::new(WriteTool));
-        self.register(Arc::new(EditTool));
-        self.register(Arc::new(GlobTool));
-        self.register(Arc::new(GrepTool));
-        self.register(Arc::new(BashTool));
+        self.register(Arc::new(Read));
+        self.register(Arc::new(Write));
+        self.register(Arc::new(Edit));
+        self.register(Arc::new(Glob));
+        self.register(Arc::new(Grep));
+        self.register(Arc::new(Bash));
     }
 
     /// Register a tool with the registry.

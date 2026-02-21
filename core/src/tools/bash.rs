@@ -28,8 +28,7 @@ use crate::tools::Tool;
 /// - Failed to capture stdout/stderr
 /// - Command wait fails
 #[cfg(unix)]
-#[allow(clippy::module_name_repetitions)]
-pub async fn bash_tool(cmd: &str) -> Result<String> {
+pub async fn bash(cmd: &str) -> Result<String> {
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(cmd)
@@ -50,7 +49,6 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
         output_lines.push(line);
     }
 
-    // Also capture stderr
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
@@ -93,8 +91,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 /// - Failed to capture stdout/stderr
 /// - Command wait fails
 #[cfg(windows)]
-#[allow(clippy::module_name_repetitions)]
-pub async fn bash_tool(cmd: &str) -> Result<String> {
+pub async fn bash(cmd: &str) -> Result<String> {
     let mut child = Command::new("cmd")
         .args(["/C", cmd])
         .stdout(Stdio::piped())
@@ -114,7 +111,6 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
         output_lines.push(line);
     }
 
-    // Also capture stderr
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
@@ -141,11 +137,10 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 }
 
 /// Bash tool wrapper.
-#[allow(clippy::module_name_repetitions)]
-pub struct BashTool;
+pub struct Bash;
 
 #[async_trait]
-impl Tool for BashTool {
+impl Tool for Bash {
     fn name(&self) -> &'static str {
         "bash"
     }
@@ -172,6 +167,6 @@ impl Tool for BashTool {
             .get("cmd")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing cmd"))?;
-        bash_tool(cmd).await
+        bash(cmd).await
     }
 }

@@ -7,8 +7,7 @@ use std::fmt;
 
 /// User command that can be executed during the interactive session.
 #[derive(Debug, Clone, PartialEq)]
-#[allow(clippy::module_name_repetitions)]
-pub enum UserCommand {
+pub enum Command {
     /// Quit the interactive session
     Quit,
 
@@ -19,7 +18,7 @@ pub enum UserCommand {
     Message(String),
 }
 
-impl fmt::Display for UserCommand {
+impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Quit => write!(f, "quit"),
@@ -34,23 +33,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_user_command_display() {
-        assert_eq!(UserCommand::Quit.to_string(), "quit");
-        assert_eq!(UserCommand::Clear.to_string(), "clear");
+    fn test_command_display() {
+        assert_eq!(Command::Quit.to_string(), "quit");
+        assert_eq!(Command::Clear.to_string(), "clear");
         assert_eq!(
-            UserCommand::Message("test".to_string()).to_string(),
+            Command::Message("test".to_string()).to_string(),
             "message: test"
         );
     }
 
     #[test]
-    fn test_user_command_equality() {
-        assert_eq!(UserCommand::Quit, UserCommand::Quit);
-        assert_eq!(UserCommand::Clear, UserCommand::Clear);
+    fn test_command_equality() {
+        assert_eq!(Command::Quit, Command::Quit);
+        assert_eq!(Command::Clear, Command::Clear);
         assert_eq!(
-            UserCommand::Message("test".to_string()),
-            UserCommand::Message("test".to_string())
+            Command::Message("test".to_string()),
+            Command::Message("test".to_string())
         );
-        assert_ne!(UserCommand::Quit, UserCommand::Clear);
+        assert_ne!(Command::Quit, Command::Clear);
     }
 }

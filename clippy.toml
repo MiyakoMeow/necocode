@@ -1,5 +1,8 @@
 # Allow expect in tests
 allow-expect-in-tests = true
 
+# Allow unwrap in tests
+allow-unwrap-in-tests = true
+
 # Suppress too-many-lines for complex functions (agent loop, streaming, etc.)
-too-many-lines-threshold = 150
+too-many-lines-threshold = 200

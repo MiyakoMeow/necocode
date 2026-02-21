@@ -4,10 +4,10 @@
 //! interactive REPL loops and single-message execution.
 
 use crate::Client;
-use crate::command::UserCommand;
-use crate::config::ProviderConfig;
+use crate::command::Command;
+use crate::config::ProviderSettings;
 use crate::events::CoreEvent;
-use crate::input::InputReader;
+use crate::input::Reader;
 use anyhow::{Context, Result};
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -35,8 +35,7 @@ impl Session {
     /// * `config` - Provider API configuration
     /// * `cwd` - Current working directory for context
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn new(config: ProviderConfig, cwd: String) -> Self {
+    pub fn new(config: ProviderSettings, cwd: &str) -> Self {
         let client = Client::new(config);
         let system_prompt = format!("Concise coding assistant. cwd: {cwd}");
         let schema = crate::api::anthropic::schema::tool_schemas();
@@ -72,14 +71,14 @@ impl Session {
     /// # Examples
     ///
     /// ```no_run
-    /// use neco_core::{Session, StdinInputReader, ProviderConfig};
+    /// use neco_core::{Session, StdinReader, ProviderSettings};
     /// use tokio::sync::mpsc;
     ///
     /// # async fn example() -> anyhow::Result<()> {
     /// let (event_sender, _) = mpsc::unbounded_channel();
-    /// let config = ProviderConfig::from_env().await?;
-    /// let mut session = Session::new(config, "/path".to_string());
-    /// let reader = StdinInputReader;
+    /// let config = ProviderSettings::from_env().await?;
+    /// let mut session = Session::new(config, "/path");
+    /// let reader = StdinReader;
     ///
     /// session.run_interactive(reader, event_sender).await?;
     /// # Ok(())
@@ -87,13 +86,12 @@ impl Session {
     /// ```
     pub async fn run_interactive(
         &mut self,
-        mut reader: impl InputReader,
+        mut reader: impl Reader,
         event_sender: mpsc::UnboundedSender<CoreEvent>,
     ) -> Result<()> {
         loop {
-            // Read user input
             let Some(user_input) = reader.read_line().await else {
-                break; // EOF, exit gracefully
+                break;
             };
 
             let user_input = user_input.trim();
@@ -101,10 +99,8 @@ impl Session {
                 continue;
             }
 
-            // Parse user input into command
             let command = Self::parse_input(user_input);
 
-            // Handle the command
             let should_continue = self.handle_command(command, &event_sender).await?;
             if !should_continue {
                 break;
@@ -137,7 +133,7 @@ impl Session {
         message: String,
         event_sender: mpsc::UnboundedSender<CoreEvent>,
     ) -> Result<()> {
-        let command = UserCommand::Message(message);
+        let command = Command::Message(message);
         self.handle_command(command, &event_sender).await?;
         Ok(())
     }
@@ -217,11 +213,11 @@ impl Session {
     /// # Returns
     ///
     /// Parsed command
-    fn parse_input(input: &str) -> UserCommand {
+    fn parse_input(input: &str) -> Command {
         match input {
-            "/q" | "exit" => UserCommand::Quit,
-            "/c" => UserCommand::Clear,
-            msg => UserCommand::Message(msg.to_string()),
+            "/q" | "exit" => Command::Quit,
+            "/c" => Command::Clear,
+            msg => Command::Message(msg.to_string()),
         }
     }
 
@@ -237,24 +233,22 @@ impl Session {
     /// Ok(true) to continue the loop, Ok(false) to exit, Err on error
     async fn handle_command(
         &mut self,
-        command: UserCommand,
+        command: Command,
         event_sender: &mpsc::UnboundedSender<CoreEvent>,
     ) -> Result<bool> {
         match command {
-            UserCommand::Quit => Ok(false),
-            UserCommand::Clear => {
+            Command::Quit => Ok(false),
+            Command::Clear => {
                 self.clear_history();
                 let _ = event_sender.send(CoreEvent::Error("Conversation cleared".to_string()));
                 Ok(true)
             },
-            UserCommand::Message(msg) => {
-                // Add user message to history
+            Command::Message(msg) => {
                 self.messages.push(json!({
                     "role": "user",
                     "content": msg,
                 }));
 
-                // Run the agentic loop (streaming)
                 if let Err(e) = self
                     .client
                     .run_agent_loop_stream(
@@ -280,24 +274,23 @@ mod tests {
 
     #[test]
     fn test_session_parse_input() {
-        assert_eq!(Session::parse_input("/q"), UserCommand::Quit);
-        assert_eq!(Session::parse_input("exit"), UserCommand::Quit);
-        assert_eq!(Session::parse_input("/c"), UserCommand::Clear);
+        assert_eq!(Session::parse_input("/q"), Command::Quit);
+        assert_eq!(Session::parse_input("exit"), Command::Quit);
+        assert_eq!(Session::parse_input("/c"), Command::Clear);
         assert_eq!(
             Session::parse_input("hello"),
-            UserCommand::Message("hello".to_string())
+            Command::Message("hello".to_string())
         );
     }
 
     #[tokio::test]
-    #[allow(clippy::unwrap_used)]
     async fn test_session_clear_history() {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults();
         drop(registry);
 
-        let config = ProviderConfig::from_env().await.unwrap();
-        let mut session = Session::new(config, "/test".to_string());
+        let config = ProviderSettings::from_env().await.unwrap();
+        let mut session = Session::new(config, "/test");
 
         session
             .messages
@@ -309,14 +302,13 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::unwrap_used)]
     async fn test_session_new() {
         let mut registry = crate::ProviderRegistry::global().write().await;
         registry.register_defaults();
         drop(registry);
 
-        let config = ProviderConfig::from_env().await.unwrap();
-        let session = Session::new(config, "/test".to_string());
+        let config = ProviderSettings::from_env().await.unwrap();
+        let session = Session::new(config, "/test");
 
         assert!(session.messages.is_empty());
         assert!(!session.system_prompt.is_empty());
