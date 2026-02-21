@@ -991,22 +991,13 @@ name = "neco"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-stream",
  "clap",
  "crossterm",
- "futures",
- "glob",
  "neco-core",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "walkdir",
 ]
 
 [[package]]
@@ -1016,7 +1007,6 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
- "clap",
  "dirs",
  "futures",
  "glob",
@@ -1029,6 +1019,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml",
+ "tracing",
  "walkdir",
 ]
 

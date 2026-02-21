@@ -70,54 +70,55 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_core_event_serialization() -> anyhow::Result<()> {
+    fn test_core_event_serialization() {
         let event = CoreEvent::TextDelta("Hello, world!".to_string());
-        let serialized = serde_json::to_string(&event)?;
-        let deserialized: CoreEvent = serde_json::from_str(&serialized)?;
+        let serialized = serde_json::to_string(&event).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
 
         match deserialized {
             CoreEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
-            _ => anyhow::bail!("Expected TextDelta variant"),
+            _ => panic!("Wrong event type"),
         }
-        Ok(())
     }
 
     #[test]
-    fn test_core_event_tool_call_start() -> anyhow::Result<()> {
+    fn test_core_event_tool_call_start() {
         let event = CoreEvent::ToolCallStart {
             id: "test-id".to_string(),
             name: "test-tool".to_string(),
         };
+        let serialized = serde_json::to_string(&event).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
 
-        match event {
+        match deserialized {
             CoreEvent::ToolCallStart { id, name } => {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
             },
-            _ => anyhow::bail!("Expected ToolCallStart variant"),
+            _ => panic!("Wrong event type"),
         }
-        Ok(())
     }
 
     #[test]
-    fn test_core_event_tool_result() -> anyhow::Result<()> {
+    fn test_core_event_tool_result() {
         let event = CoreEvent::ToolResult {
             name: "read".to_string(),
             result: "File content".to_string(),
         };
+        let serialized = serde_json::to_string(&event).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
 
-        match event {
+        match deserialized {
             CoreEvent::ToolResult { name, result } => {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
             },
-            _ => anyhow::bail!("Expected ToolResult variant"),
+            _ => panic!("Wrong event type"),
         }
-        Ok(())
     }
 
     #[test]
-    fn test_core_event_clone() -> anyhow::Result<()> {
+    fn test_core_event_clone() {
         let original = CoreEvent::TextDelta("test".to_string());
         let cloned = original.clone();
 
@@ -125,8 +126,7 @@ mod tests {
             (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
                 assert_eq!(s1, s2);
             },
-            _ => anyhow::bail!("Expected TextDelta variant"),
+            _ => panic!("Wrong event type"),
         }
-        Ok(())
     }
 }

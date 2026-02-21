@@ -1,15 +1,15 @@
-//! Standard input implementation for input reader.
+//! Standard input implementation for reader.
 
-use crate::input::InputReader;
+use super::Reader;
 use std::io;
 use tokio::task;
 
 /// Standard input reader that reads from the console.
 ///
 /// This implementation provides a blocking stdin reader wrapped in an async interface.
-pub struct StdinInputReader;
+pub struct StdinReader;
 
-impl StdinInputReader {
+impl StdinReader {
     /// Create a new stdin input reader.
     #[must_use]
     pub const fn new() -> Self {
@@ -17,14 +17,14 @@ impl StdinInputReader {
     }
 }
 
-impl Default for StdinInputReader {
+impl Default for StdinReader {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait::async_trait]
-impl InputReader for StdinInputReader {
+impl Reader for StdinReader {
     async fn read_line(&mut self) -> Option<String> {
         task::spawn_blocking(|| {
             let mut input = String::new();
@@ -42,12 +42,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_stdin_input_reader_default() {
-        let _ = StdinInputReader;
+    fn test_stdin_reader_default() {
+        let _ = StdinReader;
     }
 
     #[test]
-    fn test_stdin_input_reader_new() {
-        let _ = StdinInputReader::new();
+    fn test_stdin_reader_new() {
+        let _ = StdinReader::new();
     }
 }

@@ -4,9 +4,9 @@
 
 pub mod anthropic;
 
-pub use crate::config::ProviderConfig;
+pub use crate::config::ProviderSettings;
 
-use crate::config::{AppConfig, ProviderConfigFile};
+use crate::config::{Configuration, FileProvider};
 use anyhow::Result;
 use async_trait::async_trait;
 use indexmap::IndexMap;
@@ -26,10 +26,10 @@ pub trait Provider: Send + Sync {
     fn is_available(&self) -> bool;
 
     /// Load configuration from environment variables.
-    fn load_config(&self) -> ProviderConfig;
+    fn load_config(&self) -> ProviderSettings;
 }
 
-impl ProviderConfig {
+impl ProviderSettings {
     /// Parse boolean environment variable with default.
     ///
     /// # Arguments
@@ -66,7 +66,7 @@ impl ProviderConfig {
     fn load_and_validate_config(
         provider: &Arc<dyn Provider>,
         provider_name: &str,
-        provider_file: &ProviderConfigFile,
+        provider_file: &FileProvider,
         validate: bool,
     ) -> Result<Self> {
         let config = provider.load_config();
@@ -75,16 +75,14 @@ impl ProviderConfig {
             let env_var = provider_file.api_key_env.as_deref().unwrap_or("API_KEY");
 
             return Err(anyhow::anyhow!(
-                "API key is missing for provider '{}'. Set the {} environment variable or configure api_key in config file",
-                provider_name,
-                env_var
+                "API key is missing for provider '{provider_name}'. Set the {env_var} environment variable or configure api_key in config file"
             ));
         }
 
         Ok(config)
     }
 
-    /// Parse model string and create ProviderConfig.
+    /// Parse model string and create `ProviderSettings`.
     ///
     /// # Arguments
     ///
@@ -106,18 +104,23 @@ impl ProviderConfig {
     /// # Examples
     ///
     /// ```no_run
-    /// use neco_core::ProviderConfig;
-    /// # async fn test() -> anyhow::Result<()> {
-    /// let config = ProviderConfig::from_model_string("zhipuai/glm-4.7").await?;
+    /// use neco_core::ProviderSettings;
+    /// # fn test() -> anyhow::Result<()> {
+    /// let config = ProviderSettings::from_model_string("zhipuai/glm-4.7")?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn from_model_string(model_str: &str) -> Result<Self> {
-        let app_config = AppConfig::load();
+    pub fn from_model_string(model_str: &str) -> Result<Self> {
+        let app_config = Configuration::load();
 
         let (provider_name, model) = if model_str.contains('/') {
             let parts: Vec<&str> = model_str.splitn(2, '/').collect();
-            (parts[0], parts[1])
+            let (Some(provider), Some(model)) = (parts.first(), parts.get(1)) else {
+                return Err(anyhow::anyhow!(
+                    "Invalid model format: '{model_str}'. Expected 'provider/model'"
+                ));
+            };
+            (*provider, *model)
         } else {
             (app_config.get_default_model_provider(), model_str)
         };
@@ -125,10 +128,10 @@ impl ProviderConfig {
         let provider_file = app_config
             .get_provider_config(provider_name)
             .ok_or_else(|| {
-                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+                anyhow::anyhow!("Provider '{provider_name}' not found in configuration")
             })?;
 
-        let provider = Arc::new(ConfigFileProvider::new(
+        let provider = Arc::new(ConfigProvider::new(
             provider_name.to_string(),
             provider_file.clone(),
         )) as Arc<dyn Provider>;
@@ -165,15 +168,15 @@ impl ProviderConfig {
     /// Returns error if provider detection fails or API key validation fails.
     pub async fn from_env_with_validation() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await?;
+        let provider = registry.detect_provider()?;
         drop(registry);
 
         let provider_name = provider.name();
-        let app_config = AppConfig::load();
+        let app_config = Configuration::load();
         let provider_file = app_config
             .get_provider_config(provider_name)
             .ok_or_else(|| {
-                anyhow::anyhow!("Provider '{}' not found in configuration", provider_name)
+                anyhow::anyhow!("Provider '{provider_name}' not found in configuration")
             })?;
 
         let should_validate = Self::parse_env_bool("NEOCODE_VALIDATE_MODEL", true);
@@ -194,7 +197,7 @@ impl ProviderConfig {
     /// Returns an error if no providers are registered.
     pub async fn from_env() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await?;
+        let provider = registry.detect_provider()?;
         drop(registry);
 
         Ok(provider.load_config())
@@ -202,23 +205,23 @@ impl ProviderConfig {
 }
 
 /// Provider loaded from configuration file.
-pub struct ConfigFileProvider {
+pub struct ConfigProvider {
     /// Provider name
     name: String,
     /// Provider configuration
-    config: ProviderConfigFile,
+    config: FileProvider,
 }
 
-impl ConfigFileProvider {
+impl ConfigProvider {
     /// Create a new configuration file provider.
     #[must_use]
-    pub fn new(name: String, config: ProviderConfigFile) -> Self {
+    pub fn new(name: String, config: FileProvider) -> Self {
         Self { name, config }
     }
 }
 
 #[async_trait]
-impl Provider for ConfigFileProvider {
+impl Provider for ConfigProvider {
     fn name(&self) -> &str {
         &self.name
     }
@@ -236,7 +239,7 @@ impl Provider for ConfigFileProvider {
                 .is_some_and(|env| std::env::var(env).is_ok())
     }
 
-    fn load_config(&self) -> ProviderConfig {
+    fn load_config(&self) -> ProviderSettings {
         let api_key = self
             .config
             .api_key_env
@@ -257,7 +260,7 @@ impl Provider for ConfigFileProvider {
             .clone()
             .unwrap_or_else(|| "claude-opus-4-5".to_string());
 
-        ProviderConfig {
+        ProviderSettings {
             name: self.name.clone(),
             base_url,
             model,
@@ -279,7 +282,7 @@ impl ProviderRegistry {
     ///
     /// # Returns
     ///
-    /// A reference to the global registry wrapped in a RwLock.
+    /// A reference to the global registry wrapped in a `RwLock`.
     pub fn global() -> &'static RwLock<Self> {
         use std::sync::OnceLock;
         static REGISTRY: OnceLock<RwLock<ProviderRegistry>> = OnceLock::new();
@@ -301,11 +304,11 @@ impl ProviderRegistry {
     /// Register built-in providers.
     ///
     /// This method should be called during application initialization.
-    pub async fn register_defaults(&mut self) {
-        let app_config = AppConfig::load();
+    pub fn register_defaults(&mut self) {
+        let app_config = Configuration::load();
 
         for (name, provider_config) in app_config.model_providers {
-            let provider = Arc::new(ConfigFileProvider::new(name.clone(), provider_config));
+            let provider = Arc::new(ConfigProvider::new(name.clone(), provider_config));
             self.providers.insert(name, provider);
         }
     }
@@ -333,7 +336,7 @@ impl ProviderRegistry {
     /// # Errors
     ///
     /// Returns an error if no providers are registered.
-    pub async fn detect_provider(&self) -> Result<Arc<dyn Provider>, anyhow::Error> {
+    pub fn detect_provider(&self) -> Result<Arc<dyn Provider>, anyhow::Error> {
         for provider in self.providers.values() {
             if provider.is_available() {
                 return Ok(provider.clone());
@@ -387,8 +390,7 @@ mod tests {
             std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
         }
 
-        let result =
-            ProviderConfig::from_model_string("anthropic/claude-3-5-sonnet-20241022").await;
+        let result = ProviderSettings::from_model_string("anthropic/claude-3-5-sonnet-20241022");
 
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -404,8 +406,8 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_masked_api_key() {
-        let config = ProviderConfig {
+    fn test_provider_settings_masked_api_key() {
+        let config = ProviderSettings {
             name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
@@ -416,8 +418,8 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_masked_api_key_short() {
-        let config = ProviderConfig {
+    fn test_provider_settings_masked_api_key_short() {
+        let config = ProviderSettings {
             name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
@@ -428,8 +430,8 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_masked_api_key_empty() {
-        let config = ProviderConfig {
+    fn test_provider_settings_masked_api_key_empty() {
+        let config = ProviderSettings {
             name: "test".to_string(),
             base_url: "https://api.test.com".to_string(),
             model: "test-model".to_string(),
@@ -440,8 +442,17 @@ mod tests {
     }
 
     #[test]
-    fn test_app_config_load() {
-        let config = AppConfig::load();
+    #[serial]
+    fn test_from_model_string_invalid() {
+        let result = ProviderSettings::from_model_string("nonexistent/model");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not found"));
+    }
+
+    #[test]
+    fn test_configuration_load() {
+        let config = Configuration::load();
         assert!(config.model_providers.contains_key("anthropic"));
     }
 }

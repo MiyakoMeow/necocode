@@ -16,7 +16,13 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Newline-separated matches in format "path:line:content", up to 50 matches
-pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Regex pattern is invalid
+/// - Task spawn fails
+pub async fn grep(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".").to_string();
     let pattern =
         regex::Regex::new(pat).with_context(|| format!("Invalid regex pattern: {pat}"))?;
@@ -58,15 +64,15 @@ pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Grep tool wrapper.
-pub struct GrepTool;
+pub struct Grep;
 
 #[async_trait]
-impl Tool for GrepTool {
-    fn name(&self) -> &str {
+impl Tool for Grep {
+    fn name(&self) -> &'static str {
         "grep"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Fast content search tool that works with any codebase size. Searches file contents using regular expressions and supports full regex syntax (eg \"log.*Error\", \"function\\s+\\w+\", etc.). Returns file paths and line numbers with at least one match sorted by modification time. Use this tool when you need to find files containing specific patterns. This is especially useful for finding where functions are defined, where variables are used, or searching for specific error messages."
     }
 
@@ -93,6 +99,6 @@ impl Tool for GrepTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing pat"))?;
         let path = input.get("path").and_then(|v| v.as_str());
-        grep_tool(pat, path).await
+        grep(pat, path).await
     }
 }

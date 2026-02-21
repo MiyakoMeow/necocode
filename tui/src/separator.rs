@@ -7,6 +7,7 @@ use crossterm::{style::Stylize, terminal};
 /// # Returns
 ///
 /// A separator string using the terminal width (capped at 80 chars)
+#[must_use]
 pub fn separator() -> String {
     let (width, _) = terminal::size().unwrap_or((80, 24));
     let width = width.min(80);

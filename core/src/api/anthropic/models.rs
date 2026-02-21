@@ -5,6 +5,7 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing;
 
 /// Model information from the Anthropic API.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -25,11 +26,6 @@ pub struct ModelInfo {
 struct ModelsListResponse {
     /// List of available models
     data: Vec<ModelInfo>,
-    /// Whether there are more results (for pagination).
-    ///
-    /// NOTE: Currently unused but kept for API compatibility and future use.
-    #[allow(dead_code)]
-    has_more: bool,
 }
 
 /// Cached models data with timestamp.
@@ -69,7 +65,14 @@ pub enum ModelPreference {
 /// # Returns
 ///
 /// List of available models, or empty list on network failure.
-pub async fn fetch_available_models(
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Network request fails
+/// - API returns non-success status
+/// - Response parsing fails
+pub async fn fetch(
     client: &HttpClient,
     base_url: &str,
     api_key: &str,
@@ -83,7 +86,7 @@ pub async fn fetch_available_models(
 
     // Fetch from API
     let response = client
-        .get(format!("{}/v1/models", base_url))
+        .get(format!("{base_url}/v1/models"))
         .header("x-api-key", api_key)
         .header("anthropic-version", "2023-06-01")
         .send()
@@ -123,6 +126,7 @@ pub async fn fetch_available_models(
 /// # Returns
 ///
 /// The recommended model ID, or None if no models are available.
+#[must_use]
 pub fn recommend_model(
     available_models: &[ModelInfo],
     preference: Option<ModelPreference>,
@@ -163,6 +167,7 @@ pub fn recommend_model(
 /// # Returns
 ///
 /// true if the model exists, false otherwise.
+#[must_use]
 pub fn validate_model(model_id: &str, available_models: &[ModelInfo]) -> bool {
     available_models.iter().any(|m| m.id == model_id)
 }
@@ -221,12 +226,11 @@ fn save_models_to_cache(models: &[ModelInfo]) {
         let _ = std::fs::create_dir_all(parent);
     }
 
-    let cached_at = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(duration) => duration.as_secs(),
-        Err(_) => {
-            eprintln!("System time is before UNIX_EPOCH");
-            return;
-        },
+    let cached_at = if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
+        duration.as_secs()
+    } else {
+        tracing::error!("System time is before UNIX_EPOCH");
+        return;
     };
 
     let cache = ModelsCache {
@@ -237,7 +241,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
     let serialized = match serde_json::to_string_pretty(&cache) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to serialize models cache: {}", e);
+            tracing::error!("Failed to serialize models cache: {e}");
             return;
         },
     };

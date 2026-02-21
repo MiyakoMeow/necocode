@@ -18,7 +18,12 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// File contents with line numbers in format "    1| line content"
-pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String> {
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File read fails
+pub async fn read(path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("Failed to read file: {path}"))?;
@@ -40,15 +45,15 @@ pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) 
 }
 
 /// Read tool wrapper.
-pub struct ReadTool;
+pub struct Read;
 
 #[async_trait]
-impl Tool for ReadTool {
-    fn name(&self) -> &str {
+impl Tool for Read {
+    fn name(&self) -> &'static str {
         "read"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Read a file or directory. If reading a directory, list the files in the directory. If reading a file, this tool will return the contents of the file as a string. This tool is useful for reading code, configuration files, documentation, and any other text-based files. The output includes line numbers to make it easy to reference specific lines."
     }
 
@@ -86,6 +91,6 @@ impl Tool for ReadTool {
             .get("limit")
             .and_then(serde_json::Value::as_i64)
             .and_then(|v| usize::try_from(v).ok());
-        read_tool(path, offset, limit).await
+        read(path, offset, limit).await
     }
 }

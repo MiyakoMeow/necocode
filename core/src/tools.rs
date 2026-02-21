@@ -4,7 +4,7 @@
 //!
 //! This module defines the tool abstraction layer including:
 //! - Tool trait for uniform tool interface
-//! - ToolRegistry for centralized tool management
+//! - `ToolRegistry` for centralized tool management
 
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -20,24 +20,17 @@ pub mod grep;
 pub mod read;
 pub mod write;
 
-pub use bash::BashTool;
-pub use edit::EditTool;
-pub use glob::GlobTool;
-pub use grep::GrepTool;
-pub use read::ReadTool;
-pub use write::WriteTool;
-
-pub use bash::bash_tool;
-pub use edit::edit_tool;
-pub use glob::glob_tool;
-pub use grep::grep_tool;
-pub use read::read_tool;
-pub use write::write_tool;
+pub use bash::{Bash, bash};
+pub use edit::{Edit, edit};
+pub use glob::{Glob, glob};
+pub use grep::{Grep, grep};
+pub use read::{Read, read};
+pub use write::{Write, write};
 
 /// Tool trait defining the interface for all tools.
 ///
 /// All tools must implement this trait to be registered and executed
-/// through the ToolRegistry.
+/// through the `ToolRegistry`.
 #[async_trait]
 pub trait Tool: Send + Sync {
     /// Returns the name of the tool.
@@ -66,6 +59,7 @@ pub trait Tool: Send + Sync {
 /// The registry maintains a collection of tools and provides methods
 /// for tool registration, execution, and schema retrieval.
 pub struct ToolRegistry {
+    /// Registered tools indexed by name
     tools: IndexMap<String, Arc<dyn Tool>>,
 }
 
@@ -82,12 +76,12 @@ impl ToolRegistry {
 
     /// Register all default tools.
     fn register_all(&mut self) {
-        self.register(Arc::new(ReadTool));
-        self.register(Arc::new(WriteTool));
-        self.register(Arc::new(EditTool));
-        self.register(Arc::new(GlobTool));
-        self.register(Arc::new(GrepTool));
-        self.register(Arc::new(BashTool));
+        self.register(Arc::new(Read));
+        self.register(Arc::new(Write));
+        self.register(Arc::new(Edit));
+        self.register(Arc::new(Glob));
+        self.register(Arc::new(Grep));
+        self.register(Arc::new(Bash));
     }
 
     /// Register a tool with the registry.
@@ -105,6 +99,12 @@ impl ToolRegistry {
     /// # Returns
     ///
     /// The result of the tool execution, or an error if the tool is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Tool not found
+    /// - Tool execution fails
     pub async fn execute(&self, name: &str, input: &Value) -> Result<String> {
         self.tools
             .get(name)

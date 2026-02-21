@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::Value;
+use tracing;
 
 use crate::tools::Tool;
 
@@ -16,7 +17,11 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Newline-separated list of matching files, or "none" if no matches
-pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
+///
+/// # Errors
+///
+/// Returns error if glob pattern is invalid.
+pub fn glob(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".");
     let pattern = format!("{}/{}", base.replace('\\', "/"), pat).replace("//", "/");
 
@@ -41,12 +46,11 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
                 }
             },
             Err(e) => {
-                eprintln!("Glob error: {e}");
+                tracing::error!("Glob error: {e}");
             },
         }
     }
 
-    // Sort by modification time (newest first)
     files.sort_by(|a, b| b.1.cmp(&a.1));
 
     if files.is_empty() {
@@ -61,15 +65,15 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Glob tool wrapper.
-pub struct GlobTool;
+pub struct Glob;
 
 #[async_trait]
-impl Tool for GlobTool {
-    fn name(&self) -> &str {
+impl Tool for Glob {
+    fn name(&self) -> &'static str {
         "glob"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Fast file pattern matching tool that works with any codebase size and supports glob patterns like \"**/*.js\" or \"src/**/*.ts\". Returns matching file paths sorted by modification time. Use this tool when you need to find files by name patterns. This is especially useful for exploring codebase structure or finding files matching specific naming conventions."
     }
 
@@ -99,9 +103,9 @@ impl Tool for GlobTool {
         let path = input
             .get("path")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(std::string::ToString::to_string);
 
-        tokio::task::spawn_blocking(move || glob_tool(&pat, path.as_deref()))
+        tokio::task::spawn_blocking(move || glob(&pat, path.as_deref()))
             .await
             .context("Task join error")?
     }

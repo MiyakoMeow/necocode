@@ -3,10 +3,10 @@
 //! This module provides the main application abstraction that manages
 //! sessions, event channels, and the main execution loop.
 
-use crate::command::UserCommand;
-use crate::config::{Config, ProviderConfig};
+use crate::command::Command;
+use crate::config::{Config, ProviderSettings};
 use crate::events::CoreEvent;
-use crate::input::InputReader;
+use crate::input::Reader;
 use crate::session::Session;
 use anyhow::Result;
 use tokio::sync::mpsc;
@@ -17,22 +17,20 @@ use tokio::task::JoinHandle;
 /// # Examples
 ///
 /// ```no_run
-/// use neco_core::{App, ProviderConfig, Config, StdinInputReader};
+/// use neco_core::{App, ProviderSettings, Config, StdinReader};
 ///
 /// # fn main() -> anyhow::Result<()> {
 /// let rt = tokio::runtime::Runtime::new()?;
 /// let (provider_config, config) = rt.block_on(async {
-///     let provider_config = ProviderConfig::from_env().await?;
+///     let provider_config = ProviderSettings::from_env().await?;
 ///     let config = Config::from_env();
 ///     Ok::<_, anyhow::Error>((provider_config, config))
 /// })?;
 /// let mut app = App::new(provider_config, config)?;
 ///
-/// // Get event receiver for rendering
 /// let event_receiver = app.take_event_receiver()?;
 ///
-/// // Run in interactive mode
-/// let reader = StdinInputReader;
+/// let reader = StdinReader;
 /// app.run_interactive(reader)?;
 /// # Ok(())
 /// # }
@@ -63,9 +61,9 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if event channel creation fails.
-    pub fn new(provider_config: ProviderConfig, config: Config) -> Result<Self> {
+    pub fn new(provider_config: ProviderSettings, config: Config) -> Result<Self> {
         let (event_sender, event_receiver) = mpsc::unbounded_channel();
-        let session = Session::new(provider_config, config.cwd.clone());
+        let session = Session::new(provider_config, &config.cwd);
 
         Ok(Self {
             session,
@@ -88,11 +86,11 @@ impl App {
     /// Returns a new App instance.
     #[must_use]
     fn new_internal(
-        provider_config: ProviderConfig,
+        provider_config: ProviderSettings,
         config: Config,
         event_sender: mpsc::UnboundedSender<CoreEvent>,
     ) -> Self {
-        let session = Session::new(provider_config, config.cwd.clone());
+        let session = Session::new(provider_config, &config.cwd);
 
         Self {
             session,
@@ -132,13 +130,13 @@ impl App {
     ) -> Result<(
         mpsc::UnboundedReceiver<CoreEvent>,
         JoinHandle<Result<()>>,
-        ProviderConfig,
+        ProviderSettings,
     )> {
         let (event_receiver, handle, provider_config) = rt.block_on(async move {
             let provider_config = if let Some(model_str) = model_arg {
-                ProviderConfig::from_model_string(&model_str).await?
+                ProviderSettings::from_model_string(&model_str)?
             } else {
-                ProviderConfig::from_env().await?
+                ProviderSettings::from_env().await?
             };
             let (event_sender, event_receiver) = mpsc::unbounded_channel();
             let mut app = Self::new_internal(provider_config.clone(), config, event_sender);
@@ -199,11 +197,9 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if runtime creation fails or session execution fails.
-    pub fn run_interactive(&mut self, reader: impl InputReader) -> Result<()> {
-        // Create runtime for async execution
+    pub fn run_interactive(&mut self, reader: impl Reader) -> Result<()> {
         let rt = tokio::runtime::Runtime::new()?;
 
-        // Block on async interactive session
         rt.block_on(self.run_interactive_async(reader))
     }
 
@@ -216,7 +212,11 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on successful exit, Err on error.
-    pub async fn run_interactive_async(&mut self, reader: impl InputReader) -> Result<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns error if session execution fails.
+    pub async fn run_interactive_async(&mut self, reader: impl Reader) -> Result<()> {
         self.session
             .run_interactive(reader, self.event_sender.clone())
             .await
@@ -252,6 +252,10 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on success, Err on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if message execution fails.
     pub async fn run_single_async(&mut self, message: String) -> Result<()> {
         self.session
             .run_single(message, self.event_sender.clone())
@@ -269,6 +273,10 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on successful exit, Err on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if session execution fails.
     pub async fn run_interactive_with_input(
         &mut self,
         mut input_receiver: mpsc::UnboundedReceiver<String>,
@@ -302,11 +310,11 @@ impl App {
     /// # Returns
     /// Parsed command
     #[must_use]
-    fn parse_input(input: &str) -> UserCommand {
+    fn parse_input(input: &str) -> Command {
         match input {
-            "/q" | "exit" => UserCommand::Quit,
-            "/c" => UserCommand::Clear,
-            msg => UserCommand::Message(msg.to_string()),
+            "/q" | "exit" => Command::Quit,
+            "/c" => Command::Clear,
+            msg => Command::Message(msg.to_string()),
         }
     }
 
@@ -319,21 +327,25 @@ impl App {
     /// # Returns
     ///
     /// Ok(true) to continue the loop, Ok(false) to exit, Err on error
-    async fn handle_command(&mut self, command: UserCommand) -> Result<bool> {
+    async fn handle_command(&mut self, command: Command) -> Result<bool> {
         match command {
-            UserCommand::Quit => Ok(false),
-            UserCommand::Clear => {
+            Command::Quit => Ok(false),
+            Command::Clear => {
                 self.session.clear_history();
                 let _ = self
                     .event_sender
                     .send(CoreEvent::Error("Conversation cleared".to_string()));
                 Ok(true)
             },
-            UserCommand::Message(_msg) => {
-                if let Err(e) = self.session.run_agent_loop(&self.event_sender).await {
+            Command::Message(msg) => {
+                if let Err(e) = self
+                    .session
+                    .run_single(msg, self.event_sender.clone())
+                    .await
+                {
                     let _ = self
                         .event_sender
-                        .send(CoreEvent::Error(format!("Error: {}", e)));
+                        .send(CoreEvent::Error(format!("Error: {e}")));
                 }
                 Ok(true)
             },
@@ -368,52 +380,46 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_app_new() -> anyhow::Result<()> {
+    async fn test_app_new() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderSettings::from_env().await.unwrap();
         let config = Config::from_env();
         let app = App::new(provider_config, config);
 
         assert!(app.is_ok());
-        let app = app?;
+        let app = app.unwrap();
         assert!(app.event_receiver().is_some());
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_take_event_receiver() -> anyhow::Result<()> {
+    async fn test_app_take_event_receiver() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderSettings::from_env().await.unwrap();
         let config = Config::from_env();
-        let mut app = App::new(provider_config, config)?;
+        let mut app = App::new(provider_config, config).unwrap();
 
-        // First take should succeed
-        let _receiver1 = app.take_event_receiver()?;
+        let _receiver1 = app.take_event_receiver().unwrap();
 
-        // Second access should return None
         assert!(app.event_receiver().is_none());
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_session_access() -> anyhow::Result<()> {
+    async fn test_app_session_access() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderSettings::from_env().await.unwrap();
         let config = Config::from_env();
-        let app = App::new(provider_config, config)?;
+        let app = App::new(provider_config, config).unwrap();
 
-        // Should be able to access session
         let _session = app.session();
         let _config = app.config();
-        Ok(())
     }
 }

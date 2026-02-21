@@ -17,7 +17,12 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// "ok" on success
-pub async fn write_tool(path: &str, content: &str) -> Result<String> {
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File write fails
+pub async fn write(path: &str, content: &str) -> Result<String> {
     fs::write(path, content)
         .await
         .with_context(|| format!("Failed to write file: {path}"))?;
@@ -26,15 +31,15 @@ pub async fn write_tool(path: &str, content: &str) -> Result<String> {
 }
 
 /// Write tool wrapper.
-pub struct WriteTool;
+pub struct Write;
 
 #[async_trait]
-impl Tool for WriteTool {
-    fn name(&self) -> &str {
+impl Tool for Write {
+    fn name(&self) -> &'static str {
         "write"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Write content to a file. This tool will create the file if it does not exist, or overwrite the file if it already exists. This tool is useful for creating new files, modifying existing files, and saving code. Use this tool when you need to create or modify files in the codebase."
     }
 
@@ -64,6 +69,6 @@ impl Tool for WriteTool {
             .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing content"))?;
-        write_tool(path, content).await
+        write(path, content).await
     }
 }

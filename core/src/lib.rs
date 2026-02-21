@@ -4,6 +4,8 @@
 //!
 //! This library serves as the entry point for the entire application, re-exporting all major public types and modules.
 
+use tracing as _;
+
 pub mod api;
 pub mod app;
 pub mod command;
@@ -13,26 +15,18 @@ pub mod input;
 pub mod session;
 pub mod tools;
 
-// Re-export common types from api::anthropic
 pub use api::anthropic::{ApiError, Client};
 
-// Re-export provider types
-pub use api::{ConfigFileProvider, Provider, ProviderRegistry};
+pub use api::{Provider, ProviderRegistry};
 
-// Re-export configuration types
-pub use config::{AppConfig, Config, ProviderConfig, ProviderConfigFile};
+pub use config::{Config, Configuration, FileProvider, ProviderSettings};
 
-// Re-export CoreEvent type from events
 pub use events::CoreEvent;
 
-// Re-export UserCommand type from command
-pub use command::UserCommand;
+pub use command::Command;
 
-// Re-export input types from input
-pub use input::{InputReader, StdinInputReader};
+pub use input::{Reader, StdinReader};
 
-// Re-export Session type from session
 pub use session::Session;
 
-// Re-export App type from app
 pub use app::App;

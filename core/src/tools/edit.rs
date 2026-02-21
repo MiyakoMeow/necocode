@@ -19,7 +19,13 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// "ok" on success, error message on failure
-pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> Result<String> {
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File read fails
+/// - File write fails
+pub async fn edit(path: &str, old: &str, new: &str, all: Option<bool>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
         .with_context(|| format!("Failed to read file: {path}"))?;
@@ -51,15 +57,15 @@ pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> R
 }
 
 /// Edit tool wrapper.
-pub struct EditTool;
+pub struct Edit;
 
 #[async_trait]
-impl Tool for EditTool {
-    fn name(&self) -> &str {
+impl Tool for Edit {
+    fn name(&self) -> &'static str {
         "edit"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Edit a file by replacing old string with new string. This tool will replace the first occurrence of the old string with the new string. If there are multiple occurrences of the old string, you must either make the old string more specific to match only once, or set all=true to replace all occurrences. This tool is useful for making small changes to files without rewriting the entire file."
     }
 
@@ -102,6 +108,6 @@ impl Tool for EditTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing new"))?;
         let all = input.get("all").and_then(serde_json::Value::as_bool);
-        edit_tool(path, old, new, all).await
+        edit(path, old, new, all).await
     }
 }

@@ -5,7 +5,7 @@
 
 mod stdin;
 
-pub use stdin::StdinInputReader;
+pub use stdin::StdinReader;
 
 /// Trait for reading user input during interactive sessions.
 ///
@@ -13,7 +13,7 @@ pub use stdin::StdinInputReader;
 /// input sources (stdin, test mocks, etc.) without coupling to
 /// specific input implementations.
 #[async_trait::async_trait]
-pub trait InputReader {
+pub trait Reader {
     /// Read a single line of input from the user.
     ///
     /// Returns `None` when EOF is reached or the input stream is closed.
@@ -21,9 +21,9 @@ pub trait InputReader {
     /// # Examples
     ///
     /// ```
-    /// use neco_core::InputReader;
+    /// use neco_core::Reader;
     ///
-    /// # async fn test(mut reader: impl InputReader) {
+    /// # async fn test(mut reader: impl Reader) {
     /// if let Some(line) = reader.read_line().await {
     ///     println!("User entered: {}", line);
     /// } else {
@@ -39,18 +39,18 @@ mod tests {
     use super::*;
 
     /// Mock input reader for testing
-    struct MockInputReader {
+    struct MockReader {
         lines: Vec<Option<String>>,
     }
 
-    impl MockInputReader {
+    impl MockReader {
         fn new(lines: Vec<Option<String>>) -> Self {
             Self { lines }
         }
     }
 
     #[async_trait::async_trait]
-    impl InputReader for MockInputReader {
+    impl Reader for MockReader {
         async fn read_line(&mut self) -> Option<String> {
             if self.lines.is_empty() {
                 None
@@ -61,8 +61,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_input_reader_read() {
-        let mut reader = MockInputReader::new(vec![
+    async fn test_reader_read() {
+        let mut reader = MockReader::new(vec![
             Some("hello".to_string()),
             Some("world".to_string()),
             None,

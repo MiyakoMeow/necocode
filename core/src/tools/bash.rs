@@ -7,6 +7,7 @@ use std::process::Stdio;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
+use tracing;
 
 use crate::tools::Tool;
 
@@ -19,8 +20,15 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Command output, or "(empty)" if no output
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Command fails to spawn
+/// - Failed to capture stdout/stderr
+/// - Command wait fails
 #[cfg(unix)]
-pub async fn bash_tool(cmd: &str) -> Result<String> {
+pub async fn bash(cmd: &str) -> Result<String> {
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(cmd)
@@ -37,15 +45,14 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 
     let mut lines = stdout_reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
-    // Also capture stderr
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -76,8 +83,15 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 /// # Returns
 ///
 /// Command output, or "(empty)" if no output
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Command fails to spawn
+/// - Failed to capture stdout/stderr
+/// - Command wait fails
 #[cfg(windows)]
-pub async fn bash_tool(cmd: &str) -> Result<String> {
+pub async fn bash(cmd: &str) -> Result<String> {
     let mut child = Command::new("cmd")
         .args(["/C", cmd])
         .stdout(Stdio::piped())
@@ -93,15 +107,14 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 
     let mut lines = stdout_reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
-    // Also capture stderr
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -124,15 +137,15 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 }
 
 /// Bash tool wrapper.
-pub struct BashTool;
+pub struct Bash;
 
 #[async_trait]
-impl Tool for BashTool {
-    fn name(&self) -> &str {
+impl Tool for Bash {
+    fn name(&self) -> &'static str {
         "bash"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Execute a Bash command in a persistent shell session and return the output. This tool can run any shell command, including git, npm, docker, etc. Commands run in /home/miyakomeow/Codes/necocode by default. Use the workdir parameter if you need to run a command in a different directory. IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for those commands. Before executing the command, please follow these steps: 1. Directory Verification: If the command will create new directories or files, first use ls to verify the parent directory exists and is the correct location. For example, before running \"mkdir foo/bar\", first use ls foo to check that \"foo\" exists and is the intended parent location. 2. Command Execution: Always quote file paths that contain spaces with double quotes (e.g., rm \"path with spaces/file.txt\"). Examples of proper quoting: mkdir \"/Users/name/My Documents\" (correct), mkdir /Users/name/My Documents (incorrect - will fail), python \"/path/with spaces/script.py\" (correct), python /path/with spaces/script.py (incorrect - will fail). After ensuring proper quoting, execute the command. 3. Capture the output of the command."
     }
 
@@ -154,6 +167,6 @@ impl Tool for BashTool {
             .get("cmd")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing cmd"))?;
-        bash_tool(cmd).await
+        bash(cmd).await
     }
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Application configuration file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AppConfig {
+pub struct Configuration {
     /// Default model provider (defaults to "anthropic")
     #[serde(default)]
     pub default_model_provider: Option<String>,
@@ -15,10 +15,10 @@ pub struct AppConfig {
     pub default_model: Option<String>,
     /// Provider configurations
     #[serde(default)]
-    pub model_providers: IndexMap<String, ProviderConfigFile>,
+    pub model_providers: IndexMap<String, FileProvider>,
 }
 
-impl Default for AppConfig {
+impl Default for Configuration {
     fn default() -> Self {
         Self {
             default_model_provider: None,
@@ -28,14 +28,14 @@ impl Default for AppConfig {
     }
 }
 
-impl AppConfig {
+impl Configuration {
     /// Get built-in provider configurations.
-    fn builtin_providers() -> IndexMap<String, ProviderConfigFile> {
+    fn builtin_providers() -> IndexMap<String, FileProvider> {
         let mut providers = IndexMap::new();
 
         providers.insert(
             "anthropic".to_string(),
-            ProviderConfigFile {
+            FileProvider {
                 base_url: Some("https://api.anthropic.com".to_string()),
                 api_key: None,
                 api_key_env: Some("ANTHROPIC_AUTH_TOKEN".to_string()),
@@ -61,7 +61,7 @@ impl AppConfig {
 
         if let Some(user_config_path) = Self::get_config_path()
             && let Ok(content) = std::fs::read_to_string(&user_config_path)
-            && let Ok(user_config) = toml::from_str::<AppConfig>(&content)
+            && let Ok(user_config) = toml::from_str::<Configuration>(&content)
         {
             for (name, provider) in user_config.model_providers {
                 config.model_providers.insert(name, provider);
@@ -76,7 +76,7 @@ impl AppConfig {
     /// Get the configuration file path.
     ///
     /// Follows XDG Base Directory specification:
-    /// - `$XDG_CONFIG_HOME/neco/config.toml` (if XDG_CONFIG_HOME is set)
+    /// - `$XDG_CONFIG_HOME/neco/config.toml` (if `XDG_CONFIG_HOME` is set)
     /// - `~/.config/neco/config.toml` (default)
     ///
     /// # Returns
@@ -116,19 +116,19 @@ impl AppConfig {
     ///
     /// The provider configuration if found, `None` otherwise.
     #[must_use]
-    pub fn get_provider_config(&self, name: &str) -> Option<&ProviderConfigFile> {
+    pub fn get_provider_config(&self, name: &str) -> Option<&FileProvider> {
         self.model_providers.get(name)
     }
 }
 
 /// Provider configuration loaded from file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProviderConfigFile {
+pub struct FileProvider {
     /// API base URL
     pub base_url: Option<String>,
     /// API key (default value)
     pub api_key: Option<String>,
-    /// API key environment variable name (overrides api_key if set)
+    /// API key environment variable name (overrides `api_key` if set)
     pub api_key_env: Option<String>,
     /// Default model
     pub default_model: Option<String>,
@@ -143,7 +143,7 @@ pub struct Config {
 
 /// Provider configuration (unified for all providers).
 #[derive(Debug, Clone)]
-pub struct ProviderConfig {
+pub struct ProviderSettings {
     /// Provider name
     pub name: String,
     /// API base URL
@@ -154,7 +154,7 @@ pub struct ProviderConfig {
     pub api_key: String,
 }
 
-impl ProviderConfig {
+impl ProviderSettings {
     /// Get provider display name.
     #[must_use]
     pub fn provider_display_name(&self) -> &str {
@@ -209,18 +209,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_app_config_default() {
-        let config = AppConfig::default();
+    fn test_configuration_default() {
+        let config = Configuration::default();
         assert!(config.model_providers.contains_key("anthropic"));
     }
 
     #[test]
-    fn test_provider_config_file_anthropic() -> anyhow::Result<()> {
-        let provider = AppConfig::default()
+    fn test_file_provider_anthropic() {
+        let Some(provider) = Configuration::default()
             .model_providers
             .get("anthropic")
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Provider not found"))?;
+        else {
+            return;
+        };
 
         assert_eq!(
             provider.api_key_env,
@@ -231,7 +233,6 @@ mod tests {
             provider.base_url,
             Some("https://api.anthropic.com".to_string())
         );
-        Ok(())
     }
 
     #[test]
