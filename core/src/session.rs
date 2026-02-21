@@ -114,19 +114,21 @@ impl SessionActor {
                                 "content": [{"type": "text", "text": text}]
                             }));
                         }
-                        Self::send_event(&recipient, UiEvent::MessageStop);
                     },
                     StreamEvent::MessageStop => {
                         break;
                     },
                     StreamEvent::Error(error) => {
-                        Self::send_event(&recipient, UiEvent::Error(error));
+                        Self::send_event(&recipient, UiEvent::Error(error.clone()));
+                        return Err(anyhow::anyhow!(error));
                     },
                     StreamEvent::ToolExecuting { .. }
                     | StreamEvent::ToolResult { .. }
                     | StreamEvent::MessageStart => {},
                 }
             }
+
+            Self::send_event(&recipient, UiEvent::MessageStop);
 
             if tool_calls.is_empty() {
                 break;
@@ -217,11 +219,15 @@ impl Handler<ProcessMessage> for SessionActor {
                 Self::run_session_loop(client, messages, system_prompt, schema, recipient).await
             }
             .into_actor(self)
-            .map(|result, act, _ctx| {
-                if let Ok(updated_messages) = result {
+            .map(|result, act, _ctx| match result {
+                Ok(updated_messages) => {
                     act.messages = updated_messages;
-                }
-                Ok(())
+                    Ok(())
+                },
+                Err(e) => {
+                    act.messages.pop();
+                    Err(e)
+                },
             }),
         )
     }
