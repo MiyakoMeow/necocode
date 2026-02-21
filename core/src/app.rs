@@ -9,6 +9,7 @@ use crate::events::CoreEvent;
 use crate::input::Reader;
 use crate::session::Session;
 use anyhow::Result;
+use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -337,7 +338,12 @@ impl App {
                     .send(CoreEvent::Error("Conversation cleared".to_string()));
                 Ok(true)
             },
-            Command::Message(_) => {
+            Command::Message(msg) => {
+                self.session.messages_mut().push(json!({
+                    "role": "user",
+                    "content": msg,
+                }));
+
                 if let Err(e) = self.session.run_agent_loop(&self.event_sender).await {
                     let _ = self
                         .event_sender
