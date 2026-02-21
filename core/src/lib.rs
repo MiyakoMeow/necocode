@@ -21,12 +21,12 @@ pub use api::{Provider, ProviderRegistry};
 
 pub use config::{Config, Configuration, FileProvider, ProviderSettings};
 
-pub use events::CoreEvent;
+pub use events::{UiEvent, UiRecipient};
 
 pub use command::Command;
 
 pub use input::{Reader, StdinReader};
 
-pub use session::Session;
+pub use session::{ClearHistory, GetHistory, ProcessMessage, SessionActor};
 
 pub use app::App;
