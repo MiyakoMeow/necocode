@@ -7,6 +7,7 @@ use std::fmt;
 
 /// User command that can be executed during the interactive session.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum UserCommand {
     /// Quit the interactive session
     Quit,

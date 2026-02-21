@@ -16,6 +16,13 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Newline-separated matches in format "path:line:content", up to 50 matches
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Regex pattern is invalid
+/// - Task spawn fails
+#[allow(clippy::module_name_repetitions)]
 pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".").to_string();
     let pattern =
@@ -58,6 +65,7 @@ pub async fn grep_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Grep tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct GrepTool;
 
 #[async_trait]

@@ -136,7 +136,7 @@ impl App {
     )> {
         let (event_receiver, handle, provider_config) = rt.block_on(async move {
             let provider_config = if let Some(model_str) = model_arg {
-                ProviderConfig::from_model_string(&model_str).await?
+                ProviderConfig::from_model_string(&model_str)?
             } else {
                 ProviderConfig::from_env().await?
             };
@@ -216,6 +216,10 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on successful exit, Err on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if session execution fails.
     pub async fn run_interactive_async(&mut self, reader: impl InputReader) -> Result<()> {
         self.session
             .run_interactive(reader, self.event_sender.clone())
@@ -252,6 +256,10 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on success, Err on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if message execution fails.
     pub async fn run_single_async(&mut self, message: String) -> Result<()> {
         self.session
             .run_single(message, self.event_sender.clone())
@@ -269,6 +277,10 @@ impl App {
     /// # Returns
     ///
     /// Returns Ok(()) on successful exit, Err on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if session execution fails.
     pub async fn run_interactive_with_input(
         &mut self,
         mut input_receiver: mpsc::UnboundedReceiver<String>,
@@ -368,52 +380,52 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_app_new() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    async fn test_app_new() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderConfig::from_env().await.unwrap();
         let config = Config::from_env();
         let app = App::new(provider_config, config);
 
         assert!(app.is_ok());
-        let app = app?;
+        let app = app.unwrap();
         assert!(app.event_receiver().is_some());
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_take_event_receiver() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    async fn test_app_take_event_receiver() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderConfig::from_env().await.unwrap();
         let config = Config::from_env();
-        let mut app = App::new(provider_config, config)?;
+        let mut app = App::new(provider_config, config).unwrap();
 
         // First take should succeed
-        let _receiver1 = app.take_event_receiver()?;
+        let _receiver1 = app.take_event_receiver().unwrap();
 
         // Second access should return None
         assert!(app.event_receiver().is_none());
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_app_session_access() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    async fn test_app_session_access() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let provider_config = ProviderConfig::from_env().await?;
+        let provider_config = ProviderConfig::from_env().await.unwrap();
         let config = Config::from_env();
-        let app = App::new(provider_config, config)?;
+        let app = App::new(provider_config, config).unwrap();
 
         // Should be able to access session
         let _session = app.session();
         let _config = app.config();
-        Ok(())
     }
 }

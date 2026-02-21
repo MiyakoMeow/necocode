@@ -13,6 +13,7 @@ pub use stdin::StdinInputReader;
 /// input sources (stdin, test mocks, etc.) without coupling to
 /// specific input implementations.
 #[async_trait::async_trait]
+#[allow(clippy::module_name_repetitions)]
 pub trait InputReader {
     /// Read a single line of input from the user.
     ///

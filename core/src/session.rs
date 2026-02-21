@@ -35,6 +35,7 @@ impl Session {
     /// * `config` - Provider API configuration
     /// * `cwd` - Current working directory for context
     #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(config: ProviderConfig, cwd: String) -> Self {
         let client = Client::new(config);
         let system_prompt = format!("Concise coding assistant. cwd: {cwd}");
@@ -61,6 +62,12 @@ impl Session {
     /// # Returns
     ///
     /// Ok(()) on normal exit, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Command handling fails
+    /// - Agent loop fails
     ///
     /// # Examples
     ///
@@ -119,6 +126,12 @@ impl Session {
     /// # Returns
     ///
     /// Ok(()) on success, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Command handling fails
+    /// - Agent loop fails
     pub async fn run_single(
         &mut self,
         message: String,
@@ -173,6 +186,13 @@ impl Session {
     /// # Returns
     ///
     /// Ok(()) on success, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - API request fails
+    /// - Tool execution fails
+    /// - Response processing fails
     pub async fn run_agent_loop(
         &mut self,
         event_sender: &mpsc::UnboundedSender<CoreEvent>,
@@ -270,12 +290,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_session_clear_history() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    async fn test_session_clear_history() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let config = ProviderConfig::from_env().await?;
+        let config = ProviderConfig::from_env().await.unwrap();
         let mut session = Session::new(config, "/test".to_string());
 
         session
@@ -285,21 +306,20 @@ mod tests {
 
         session.clear_history();
         assert!(session.messages.is_empty());
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_session_new() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    async fn test_session_new() {
         let mut registry = crate::ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
         drop(registry);
 
-        let config = ProviderConfig::from_env().await?;
+        let config = ProviderConfig::from_env().await.unwrap();
         let session = Session::new(config, "/test".to_string());
 
         assert!(session.messages.is_empty());
         assert!(!session.system_prompt.is_empty());
         assert!(!session.schema.is_empty());
-        Ok(())
     }
 }

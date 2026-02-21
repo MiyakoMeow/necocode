@@ -18,6 +18,12 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// File contents with line numbers in format "    1| line content"
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File read fails
+#[allow(clippy::module_name_repetitions)]
 pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
@@ -40,6 +46,7 @@ pub async fn read_tool(path: &str, offset: Option<usize>, limit: Option<usize>) 
 }
 
 /// Read tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct ReadTool;
 
 #[async_trait]

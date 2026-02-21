@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::Value;
+use tracing;
 
 use crate::tools::Tool;
 
@@ -16,6 +17,11 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Newline-separated list of matching files, or "none" if no matches
+///
+/// # Errors
+///
+/// Returns error if glob pattern is invalid.
+#[allow(clippy::module_name_repetitions)]
 pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
     let base = path.unwrap_or(".");
     let pattern = format!("{}/{}", base.replace('\\', "/"), pat).replace("//", "/");
@@ -41,7 +47,7 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
                 }
             },
             Err(e) => {
-                eprintln!("Glob error: {e}");
+                tracing::error!("Glob error: {e}");
             },
         }
     }
@@ -61,6 +67,7 @@ pub fn glob_tool(pat: &str, path: Option<&str>) -> Result<String> {
 }
 
 /// Glob tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct GlobTool;
 
 #[async_trait]

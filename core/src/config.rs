@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 /// Application configuration file.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct AppConfig {
     /// Default model provider (defaults to "anthropic")
     #[serde(default)]
@@ -143,6 +144,7 @@ pub struct Config {
 
 /// Provider configuration (unified for all providers).
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct ProviderConfig {
     /// Provider name
     pub name: String,
@@ -215,12 +217,13 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_config_file_anthropic() -> anyhow::Result<()> {
+    #[allow(clippy::unwrap_used)]
+    fn test_provider_config_file_anthropic() {
         let provider = AppConfig::default()
             .model_providers
             .get("anthropic")
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Provider not found"))?;
+            .unwrap();
 
         assert_eq!(
             provider.api_key_env,
@@ -231,7 +234,6 @@ mod tests {
             provider.base_url,
             Some("https://api.anthropic.com".to_string())
         );
-        Ok(())
     }
 
     #[test]

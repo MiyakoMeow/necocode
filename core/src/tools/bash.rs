@@ -7,6 +7,7 @@ use std::process::Stdio;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
+use tracing;
 
 use crate::tools::Tool;
 
@@ -19,7 +20,15 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// Command output, or "(empty)" if no output
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Command fails to spawn
+/// - Failed to capture stdout/stderr
+/// - Command wait fails
 #[cfg(unix)]
+#[allow(clippy::module_name_repetitions)]
 pub async fn bash_tool(cmd: &str) -> Result<String> {
     let mut child = Command::new("sh")
         .arg("-c")
@@ -37,7 +46,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 
     let mut lines = stdout_reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -45,7 +54,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -76,7 +85,15 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 /// # Returns
 ///
 /// Command output, or "(empty)" if no output
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Command fails to spawn
+/// - Failed to capture stdout/stderr
+/// - Command wait fails
 #[cfg(windows)]
+#[allow(clippy::module_name_repetitions)]
 pub async fn bash_tool(cmd: &str) -> Result<String> {
     let mut child = Command::new("cmd")
         .args(["/C", cmd])
@@ -93,7 +110,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 
     let mut lines = stdout_reader.lines();
     while let Ok(Some(line)) = lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -101,7 +118,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
     let stderr_reader = BufReader::new(stderr);
     let mut stderr_lines = stderr_reader.lines();
     while let Ok(Some(line)) = stderr_lines.next_line().await {
-        println!("  │ {line}");
+        tracing::info!("  │ {line}");
         output_lines.push(line);
     }
 
@@ -124,6 +141,7 @@ pub async fn bash_tool(cmd: &str) -> Result<String> {
 }
 
 /// Bash tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct BashTool;
 
 #[async_trait]

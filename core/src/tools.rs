@@ -66,6 +66,7 @@ pub trait Tool: Send + Sync {
 /// The registry maintains a collection of tools and provides methods
 /// for tool registration, execution, and schema retrieval.
 pub struct ToolRegistry {
+    /// Registered tools indexed by name
     tools: IndexMap<String, Arc<dyn Tool>>,
 }
 
@@ -105,6 +106,12 @@ impl ToolRegistry {
     /// # Returns
     ///
     /// The result of the tool execution, or an error if the tool is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Tool not found
+    /// - Tool execution fails
     pub async fn execute(&self, name: &str, input: &Value) -> Result<String> {
         self.tools
             .get(name)

@@ -17,6 +17,12 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// "ok" on success
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File write fails
+#[allow(clippy::module_name_repetitions)]
 pub async fn write_tool(path: &str, content: &str) -> Result<String> {
     fs::write(path, content)
         .await
@@ -26,6 +32,7 @@ pub async fn write_tool(path: &str, content: &str) -> Result<String> {
 }
 
 /// Write tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct WriteTool;
 
 #[async_trait]

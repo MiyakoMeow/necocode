@@ -4,6 +4,9 @@
 //!
 //! This library serves as the entry point for the entire application, re-exporting all major public types and modules.
 
+// Use tracing to satisfy unused dependency lint
+use tracing as _;
+
 pub mod api;
 pub mod app;
 pub mod command;

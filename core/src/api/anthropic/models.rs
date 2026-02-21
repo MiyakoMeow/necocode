@@ -5,6 +5,7 @@ use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing;
 
 /// Model information from the Anthropic API.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -69,6 +70,14 @@ pub enum ModelPreference {
 /// # Returns
 ///
 /// List of available models, or empty list on network failure.
+///
+/// # Errors
+///
+/// Returns error if:
+/// - Network request fails
+/// - API returns non-success status
+/// - Response parsing fails
+#[allow(clippy::module_name_repetitions)]
 pub async fn fetch_available_models(
     client: &HttpClient,
     base_url: &str,
@@ -226,7 +235,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
     let cached_at = if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
         duration.as_secs()
     } else {
-        eprintln!("System time is before UNIX_EPOCH");
+        tracing::error!("System time is before UNIX_EPOCH");
         return;
     };
 
@@ -238,7 +247,7 @@ fn save_models_to_cache(models: &[ModelInfo]) {
     let serialized = match serde_json::to_string_pretty(&cache) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Failed to serialize models cache: {e}");
+            tracing::error!("Failed to serialize models cache: {e}");
             return;
         },
     };

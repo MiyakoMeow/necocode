@@ -112,7 +112,7 @@ fn run(args: CliArgs, config: Config) -> anyhow::Result<ExitCode> {
     let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
     rt.block_on(async {
         let mut registry = ProviderRegistry::global().write().await;
-        registry.register_defaults().await;
+        registry.register_defaults();
     });
 
     let (input_sender, input_receiver) = mpsc::unbounded_channel();

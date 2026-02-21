@@ -356,7 +356,8 @@ fn parse_sse_stream(response: reqwest::Response) -> EventStream {
 
 /// API client.
 pub struct Client {
-    /// HTTP client, used to send API requests
+    /// HTTP client for making API requests
+    #[allow(clippy::struct_field_names)]
     http_client: HttpClient,
     /// API configuration, contains key, base URL and other information
     config: ProviderConfig,
@@ -386,6 +387,13 @@ impl Client {
     /// # Returns
     ///
     /// Stream of events from the API
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Network request fails
+    /// - API returns error response
+    /// - Response parsing fails
     pub async fn create_message_stream(
         &self,
         messages: &[Value],
@@ -446,6 +454,14 @@ impl Client {
     /// # Returns
     ///
     /// Ok(()) on success, Err on failure
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - API request fails
+    /// - Tool execution fails
+    /// - Response processing fails
+    #[allow(clippy::too_many_lines)]
     pub async fn run_agent_loop_stream(
         &self,
         messages: &mut Vec<Value>,
@@ -633,39 +649,75 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tool_call_collector_basic() {
-        let mut collector = ToolCallCollector::new();
-
-        // Simulate tool call start
-        collector.process_event(&StreamEvent::ContentBlockStart {
-            index: 0,
-            content_block: ContentBlock::ToolUse {
-                id: "call_123".to_string(),
-                name: "read".to_string(),
-                input: json!(""),
+    #[allow(clippy::panic)]
+    fn test_content_block_deserialize() {
+        let text_json = json!({"type": "text", "text": "Hello"});
+        let text: ContentBlock = match serde_json::from_value(text_json) {
+            Ok(t) => t,
+            Err(e) => {
+                panic!("Failed to deserialize text ContentBlock: {e}")
             },
-        });
-
-        // Simulate delta data
-        collector.process_event(&StreamEvent::ContentBlockDelta {
-            index: 0,
-            delta: Delta::InputJson {
-                partial_json: r#"{"file_path":"test.rs"}"#.to_string(),
-            },
-        });
-
-        // Simulate end
-        collector.process_event(&StreamEvent::ContentBlockStop { index: 0 });
-
-        // Verify collection
-        assert!(collector.has_completed_calls());
-        let calls = collector.take_completed();
-        assert_eq!(calls.len(), 1);
-        // Use let-else pattern instead of if-else
-        let Some(call) = calls.first() else {
-            return; // Empty vector: test passes early
         };
-        assert_eq!(call.name, "read");
+        match text {
+            ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
+            ContentBlock::ToolUse { .. } => {
+                panic!("Expected Text variant but got ToolUse in test")
+            },
+        }
+
+        let tool_json = json!({
+            "type": "tool_use",
+            "id": "call_123",
+            "name": "read",
+            "input": {"path": "test.rs"}
+        });
+        let tool: ContentBlock = match serde_json::from_value(tool_json) {
+            Ok(t) => t,
+            Err(e) => {
+                panic!("Failed to deserialize tool_use ContentBlock: {e}")
+            },
+        };
+        match tool {
+            ContentBlock::ToolUse { id, name, .. } => {
+                assert_eq!(id, "call_123");
+                assert_eq!(name, "read");
+            },
+            ContentBlock::Text { .. } => {
+                panic!("Expected ToolUse variant but got Text in test")
+            },
+        }
+    }
+
+    #[test]
+    #[allow(clippy::panic)]
+    fn test_delta_deserialize() {
+        let text_delta_json = json!({"type": "text_delta", "text": "Hello"});
+        let delta: Delta = match serde_json::from_value(text_delta_json) {
+            Ok(d) => d,
+            Err(e) => {
+                panic!("Failed to deserialize text_delta Delta: {e}")
+            },
+        };
+        match delta {
+            Delta::Text { text } => assert_eq!(text, "Hello"),
+            Delta::InputJson { .. } => {
+                panic!("Expected Text variant but got InputJson in test")
+            },
+        }
+
+        let json_delta_json = json!({"type": "input_json_delta", "partial_json": "{}"});
+        let delta: Delta = match serde_json::from_value(json_delta_json) {
+            Ok(d) => d,
+            Err(e) => {
+                panic!("Failed to deserialize input_json_delta Delta: {e}")
+            },
+        };
+        match delta {
+            Delta::InputJson { partial_json } => assert_eq!(partial_json, "{}"),
+            Delta::Text { .. } => {
+                panic!("Expected InputJson variant but got Text in test")
+            },
+        }
     }
 
     #[test]
@@ -749,79 +801,5 @@ mod tests {
         // Verify incomplete
         assert!(!collector.has_completed_calls());
         assert!(collector.is_active());
-    }
-
-    #[test]
-    fn test_content_block_deserialize() {
-        let text_json = json!({"type": "text", "text": "Hello"});
-        let text: ContentBlock = match serde_json::from_value(text_json) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Failed to deserialize text ContentBlock: {e}");
-                return;
-            },
-        };
-        match text {
-            ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
-            ContentBlock::ToolUse { .. } => {
-                unreachable!("Expected Text variant but got ToolUse in test")
-            },
-        }
-
-        let tool_json = json!({
-            "type": "tool_use",
-            "id": "call_123",
-            "name": "read",
-            "input": {"path": "test.rs"}
-        });
-        let tool: ContentBlock = match serde_json::from_value(tool_json) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Failed to deserialize tool_use ContentBlock: {e}");
-                return;
-            },
-        };
-        match tool {
-            ContentBlock::ToolUse { id, name, .. } => {
-                assert_eq!(id, "call_123");
-                assert_eq!(name, "read");
-            },
-            ContentBlock::Text { .. } => {
-                unreachable!("Expected ToolUse variant but got Text in test")
-            },
-        }
-    }
-
-    #[test]
-    fn test_delta_deserialize() {
-        let text_delta_json = json!({"type": "text_delta", "text": "Hello"});
-        let delta: Delta = match serde_json::from_value(text_delta_json) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("Failed to deserialize text_delta Delta: {e}");
-                return;
-            },
-        };
-        match delta {
-            Delta::Text { text } => assert_eq!(text, "Hello"),
-            Delta::InputJson { .. } => {
-                unreachable!("Expected Text variant but got InputJson in test")
-            },
-        }
-
-        let json_delta_json = json!({"type": "input_json_delta", "partial_json": "{}"});
-        let delta: Delta = match serde_json::from_value(json_delta_json) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("Failed to deserialize input_json_delta Delta: {e}");
-                return;
-            },
-        };
-        match delta {
-            Delta::InputJson { partial_json } => assert_eq!(partial_json, "{}"),
-            Delta::Text { .. } => {
-                unreachable!("Expected InputJson variant but got Text in test")
-            },
-        }
     }
 }

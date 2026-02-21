@@ -19,6 +19,13 @@ use crate::tools::Tool;
 /// # Returns
 ///
 /// "ok" on success, error message on failure
+///
+/// # Errors
+///
+/// Returns error if:
+/// - File read fails
+/// - File write fails
+#[allow(clippy::module_name_repetitions)]
 pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> Result<String> {
     let content = fs::read_to_string(path)
         .await
@@ -51,6 +58,7 @@ pub async fn edit_tool(path: &str, old: &str, new: &str, all: Option<bool>) -> R
 }
 
 /// Edit tool wrapper.
+#[allow(clippy::module_name_repetitions)]
 pub struct EditTool;
 
 #[async_trait]

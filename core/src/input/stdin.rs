@@ -1,6 +1,6 @@
 //! Standard input implementation for input reader.
 
-use crate::input::InputReader;
+use super::InputReader;
 use std::io;
 use tokio::task;
 

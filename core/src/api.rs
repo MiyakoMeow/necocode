@@ -105,17 +105,22 @@ impl ProviderConfig {
     ///
     /// ```no_run
     /// use neco_core::ProviderConfig;
-    /// # async fn test() -> anyhow::Result<()> {
-    /// let config = ProviderConfig::from_model_string("zhipuai/glm-4.7").await?;
+    /// # fn test() -> anyhow::Result<()> {
+    /// let config = ProviderConfig::from_model_string("zhipuai/glm-4.7")?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn from_model_string(model_str: &str) -> Result<Self> {
+    pub fn from_model_string(model_str: &str) -> Result<Self> {
         let app_config = AppConfig::load();
 
         let (provider_name, model) = if model_str.contains('/') {
             let parts: Vec<&str> = model_str.splitn(2, '/').collect();
-            (parts[0], parts[1])
+            let (Some(provider), Some(model)) = (parts.first(), parts.get(1)) else {
+                return Err(anyhow::anyhow!(
+                    "Invalid model format: '{model_str}'. Expected 'provider/model'"
+                ));
+            };
+            (*provider, *model)
         } else {
             (app_config.get_default_model_provider(), model_str)
         };
@@ -163,7 +168,7 @@ impl ProviderConfig {
     /// Returns error if provider detection fails or API key validation fails.
     pub async fn from_env_with_validation() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await?;
+        let provider = registry.detect_provider()?;
         drop(registry);
 
         let provider_name = provider.name();
@@ -192,7 +197,7 @@ impl ProviderConfig {
     /// Returns an error if no providers are registered.
     pub async fn from_env() -> Result<Self> {
         let registry = ProviderRegistry::global().read().await;
-        let provider = registry.detect_provider().await?;
+        let provider = registry.detect_provider()?;
         drop(registry);
 
         Ok(provider.load_config())
@@ -299,7 +304,7 @@ impl ProviderRegistry {
     /// Register built-in providers.
     ///
     /// This method should be called during application initialization.
-    pub async fn register_defaults(&mut self) {
+    pub fn register_defaults(&mut self) {
         let app_config = AppConfig::load();
 
         for (name, provider_config) in app_config.model_providers {
@@ -331,7 +336,7 @@ impl ProviderRegistry {
     /// # Errors
     ///
     /// Returns an error if no providers are registered.
-    pub async fn detect_provider(&self) -> Result<Arc<dyn Provider>, anyhow::Error> {
+    pub fn detect_provider(&self) -> Result<Arc<dyn Provider>, anyhow::Error> {
         for provider in self.providers.values() {
             if provider.is_available() {
                 return Ok(provider.clone());
@@ -378,6 +383,7 @@ mod tests {
 
     #[tokio::test]
     #[serial]
+    #[allow(clippy::unwrap_used)]
     async fn test_from_model_string_missing_api_key() {
         let original_key = std::env::var("ANTHROPIC_AUTH_TOKEN").ok();
 
@@ -385,8 +391,7 @@ mod tests {
             std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
         }
 
-        let result =
-            ProviderConfig::from_model_string("anthropic/claude-3-5-sonnet-20241022").await;
+        let result = ProviderConfig::from_model_string("anthropic/claude-3-5-sonnet-20241022");
 
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
@@ -435,6 +440,15 @@ mod tests {
         };
 
         assert_eq!(config.masked_api_key(), "(no key)");
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn test_from_model_string_invalid() {
+        let result = ProviderConfig::from_model_string("invalid");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("API key is missing") || err_msg.contains("not found"));
     }
 
     #[test]
