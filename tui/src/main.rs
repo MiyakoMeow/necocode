@@ -1,6 +1,7 @@
 //! nanocode - minimal Claude code alternative in Rust using Actix Actor model.
 
 use actix::prelude::*;
+use anyhow::Context as _;
 use anyhow::Result;
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
@@ -161,36 +162,30 @@ fn run(args: &CliArgs, config: &Config) -> Result<()> {
         if let Some(message) = &args.message {
             App::process_message(&session_addr, message.clone(), ui_recipient)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to process message: {e}"))?;
+                .context("Failed to process message")?;
         } else {
             let stdin = io::stdin();
             for line in stdin.lock().lines() {
-                match line {
-                    Ok(input) => {
-                        let trimmed = input.trim();
-                        if trimmed.is_empty() {
-                            continue;
-                        }
+                let Ok(input) = line else {
+                    break;
+                };
 
-                        match trimmed {
-                            "/q" | "exit" => break,
-                            "/c" => {
-                                session_addr.send(ClearHistory).await.ok();
-                                ui_recipient
-                                    .do_send(UiEvent::Error("Conversation cleared".to_string()));
-                            },
-                            msg => {
-                                App::process_message(
-                                    &session_addr,
-                                    msg.to_string(),
-                                    ui_recipient.clone(),
-                                )
-                                .await
-                                .map_err(|e| anyhow::anyhow!("Failed to process message: {e}"))?;
-                            },
-                        }
+                let trimmed = input.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                match trimmed {
+                    "/q" | "exit" => break,
+                    "/c" => {
+                        session_addr.send(ClearHistory).await.ok();
+                        ui_recipient.do_send(UiEvent::Error("Conversation cleared".to_string()));
                     },
-                    Err(_) => break,
+                    msg => {
+                        App::process_message(&session_addr, msg.to_string(), ui_recipient.clone())
+                            .await
+                            .context("Failed to process message")?;
+                    },
                 }
             }
         }

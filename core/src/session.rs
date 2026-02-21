@@ -4,6 +4,7 @@
 //! with the AI through message-based communication.
 
 use actix::prelude::*;
+use anyhow::Context as _;
 use anyhow::Result;
 use serde_json::{Value, json};
 
@@ -85,7 +86,7 @@ impl SessionActor {
             let mut stream = client
                 .create_message_stream(&messages, &system_prompt, Some(&schema))
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to create message stream: {e}"))?;
+                .context("Failed to create message stream")?;
 
             let mut tool_calls: Vec<ToolCall> = Vec::new();
             let mut current_text = String::new();
@@ -93,7 +94,7 @@ impl SessionActor {
             Self::send_event(&recipient, UiEvent::MessageStart);
 
             while let Some(event_result) = stream.next().await {
-                let event = event_result.map_err(|e| anyhow::anyhow!("Stream error: {e}"))?;
+                let event = event_result.context("Stream error")?;
 
                 match event {
                     StreamEvent::TextDelta(text) => {

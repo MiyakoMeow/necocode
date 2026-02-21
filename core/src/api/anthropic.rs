@@ -331,72 +331,71 @@ fn parse_sse_stream(
                     continue;
                 }
 
-                if let Some(data) = line.strip_prefix("data: ") {
-                    if data == "[DONE]" {
-                        yield Ok(InternalEvent::MessageStop);
-                        continue;
-                    }
+                let Some(data) = line.strip_prefix("data: ") else {
+                    continue;
+                };
 
-                    match serde_json::from_str::<Value>(data) {
-                        Ok(value) => {
-                            if let Some(event_type) = value.get("type").and_then(|v| v.as_str()) {
-                                let event = match event_type {
-                                    "message_start" => InternalEvent::MessageStart,
-                                    "content_block_start" => {
-                                        if let Some(block) = value.get("content_block") {
-                                            InternalEvent::ContentBlockStart {
-                                                index: value.get("index")
-                                                    .and_then(Value::as_u64)
-                                                    .unwrap_or(0)
-                                                    .try_into()
-                                                    .unwrap_or(0),
-                                                content_block: serde_json::from_value(block.clone())
-                                                    .unwrap_or(ContentBlock::Text { text: String::new() }),
-                                            }
-                                        } else {
-                                            continue;
-                                        }
-                                    },
-                                    "content_block_delta" => {
-                                        InternalEvent::ContentBlockDelta {
-                                            index: value.get("index")
-                                                .and_then(Value::as_u64)
-                                                .unwrap_or(0)
-                                                .try_into()
-                                                .unwrap_or(0),
-                                            delta: serde_json::from_value(
-                                                value.get("delta").cloned().unwrap_or_default()
-                                            ).unwrap_or(Delta::Text { text: String::new() }),
-                                        }
-                                    },
-                                    "content_block_stop" => InternalEvent::ContentBlockStop {
-                                        index: value.get("index")
-                                            .and_then(Value::as_u64)
-                                            .unwrap_or(0)
-                                            .try_into()
-                                            .unwrap_or(0),
-                                    },
-                                    "message_delta" => InternalEvent::MessageDelta,
-                                    "message_stop" => InternalEvent::MessageStop,
-                                    "error" => InternalEvent::Error {
-                                        error: ApiError::Api(
-                                            value.get("error")
-                                                .and_then(|e| e.get("message"))
-                                                .and_then(|m| m.as_str())
-                                                .unwrap_or("Unknown error")
-                                                .to_string()
-                                        ),
-                                    },
-                                    _ => continue,
-                                };
-                                yield Ok(event);
-                            }
-                        }
-                        Err(e) => {
-                            yield Err(ApiError::ParseError(format!("Failed to parse SSE data: {e}")));
-                        }
-                    }
+                if data == "[DONE]" {
+                    yield Ok(InternalEvent::MessageStop);
+                    continue;
                 }
+
+                let Ok(value) = serde_json::from_str::<Value>(data) else {
+                    yield Err(ApiError::ParseError("Failed to parse SSE data".to_string()));
+                    continue;
+                };
+
+                let Some(event_type) = value.get("type").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+
+                let event = match event_type {
+                    "message_start" => InternalEvent::MessageStart,
+                    "content_block_start" => {
+                        let Some(block) = value.get("content_block") else {
+                            continue;
+                        };
+                        InternalEvent::ContentBlockStart {
+                            index: value.get("index")
+                                .and_then(Value::as_u64)
+                                .unwrap_or(0)
+                                .try_into()
+                                .unwrap_or(0),
+                            content_block: serde_json::from_value(block.clone())
+                                .unwrap_or(ContentBlock::Text { text: String::new() }),
+                        }
+                    },
+                    "content_block_delta" => InternalEvent::ContentBlockDelta {
+                        index: value.get("index")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0)
+                            .try_into()
+                            .unwrap_or(0),
+                        delta: serde_json::from_value(
+                            value.get("delta").cloned().unwrap_or_default()
+                        ).unwrap_or(Delta::Text { text: String::new() }),
+                    },
+                    "content_block_stop" => InternalEvent::ContentBlockStop {
+                        index: value.get("index")
+                            .and_then(Value::as_u64)
+                            .unwrap_or(0)
+                            .try_into()
+                            .unwrap_or(0),
+                    },
+                    "message_delta" => InternalEvent::MessageDelta,
+                    "message_stop" => InternalEvent::MessageStop,
+                    "error" => InternalEvent::Error {
+                        error: ApiError::Api(
+                            value.get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown error")
+                                .to_string()
+                        ),
+                    },
+                    _ => continue,
+                };
+                yield Ok(event);
             }
         }
     })

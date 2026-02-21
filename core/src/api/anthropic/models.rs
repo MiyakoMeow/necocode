@@ -212,9 +212,8 @@ fn load_cached_models() -> Result<ModelsCache, Box<dyn std::error::Error>> {
 fn is_cache_valid(cache: &ModelsCache) -> bool {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| anyhow::anyhow!("System time is before UNIX_EPOCH"))
-        .unwrap_or_default()
-        .as_secs();
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let cache_age = now.saturating_sub(cache.cached_at);
     cache_age < 24 * 60 * 60 // 24 hours
 }
