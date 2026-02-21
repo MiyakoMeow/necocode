@@ -442,11 +442,12 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_from_model_string_invalid() {
-        let result = ProviderSettings::from_model_string("invalid");
+        let result = ProviderSettings::from_model_string("nonexistent/model");
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("API key is missing") || err_msg.contains("not found"));
+        assert!(err_msg.contains("not found"));
     }
 
     #[test]
