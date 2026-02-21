@@ -77,7 +77,7 @@ mod tests {
 
         match deserialized {
             CoreEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
-            _ => assert!(false, "Wrong event type"),
+            _ => panic!("Wrong event type"),
         }
     }
 
@@ -95,7 +95,7 @@ mod tests {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
             },
-            _ => assert!(false, "Wrong event type"),
+            _ => panic!("Wrong event type"),
         }
     }
 
@@ -113,7 +113,7 @@ mod tests {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
             },
-            _ => assert!(false, "Wrong event type"),
+            _ => panic!("Wrong event type"),
         }
     }
 
@@ -126,7 +126,7 @@ mod tests {
             (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
                 assert_eq!(s1, s2);
             },
-            _ => assert!(false, "Wrong event type"),
+            _ => panic!("Wrong event type"),
         }
     }
 }

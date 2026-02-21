@@ -650,7 +650,7 @@ mod tests {
         match text {
             ContentBlock::Text { text: t } => assert_eq!(t, "Hello"),
             ContentBlock::ToolUse { .. } => {
-                assert!(false, "Expected Text variant but got ToolUse in test");
+                panic!("Expected Text variant but got ToolUse in test");
             },
         }
 
@@ -667,7 +667,7 @@ mod tests {
                 assert_eq!(name, "read");
             },
             ContentBlock::Text { .. } => {
-                assert!(false, "Expected ToolUse variant but got Text in test");
+                panic!("Expected ToolUse variant but got Text in test");
             },
         }
     }
@@ -679,7 +679,7 @@ mod tests {
         match delta {
             Delta::Text { text } => assert_eq!(text, "Hello"),
             Delta::InputJson { .. } => {
-                assert!(false, "Expected Text variant but got InputJson in test");
+                panic!("Expected Text variant but got InputJson in test");
             },
         }
 
@@ -688,7 +688,7 @@ mod tests {
         match delta {
             Delta::InputJson { partial_json } => assert_eq!(partial_json, "{}"),
             Delta::Text { .. } => {
-                assert!(false, "Expected InputJson variant but got Text in test");
+                panic!("Expected InputJson variant but got Text in test");
             },
         }
     }

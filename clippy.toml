@@ -4,6 +4,9 @@ allow-expect-in-tests = true
 # Allow unwrap in tests
 allow-unwrap-in-tests = true
 
+# Allow panic in tests
+allow-panic-in-tests = true
+
 # Allow print in tests
 allow-print-in-tests = true
 
