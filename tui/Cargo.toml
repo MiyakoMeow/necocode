@@ -16,6 +16,7 @@ crossterm.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
+actix.workspace = true
 
 [[bin]]
 name = "neco"
