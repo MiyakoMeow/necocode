@@ -1,59 +1,43 @@
-//! Session management using Actix Actor model.
+//! Session management for interactive and single-message modes.
 //!
-//! This module contains the session actor that handles conversations
-//! with the AI through message-based communication.
+//! This module contains the main session logic that handles both
+//! interactive REPL loops and single-message execution.
 
-use actix::prelude::*;
-use anyhow::Context as _;
-use anyhow::Result;
-use serde_json::{Value, json};
-
-use crate::api::anthropic::{Client, StreamEvent, ToolCall};
+use crate::Client;
+use crate::command::Command;
 use crate::config::ProviderSettings;
-use crate::events::UiEvent;
+use crate::events::CoreEvent;
+use crate::input::Reader;
+use anyhow::{Context, Result};
+use serde_json::json;
+use tokio::sync::mpsc;
 
-/// System prompt base.
-const SYSTEM_PROMPT_BASE: &str = "Concise coding assistant. cwd:";
-
-/// User message command.
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "Result<()>")]
-pub struct ProcessMessage {
-    /// The message content.
-    pub content: String,
-    /// UI recipient for event notifications.
-    pub ui_recipient: Recipient<UiEvent>,
-}
-
-/// Clear history command.
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
-pub struct ClearHistory;
-
-/// Get history command.
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "Vec<Value>")]
-pub struct GetHistory;
-
-/// Session actor for managing AI conversations.
-#[allow(clippy::module_name_repetitions)]
-pub struct SessionActor {
-    /// API client for communicating with the LLM provider.
+/// Session for managing conversations with the AI.
+///
+/// A session maintains conversation state and provides methods for
+/// both interactive and single-message execution modes.
+pub struct Session {
+    /// API client for communicating with Anthropic
     client: Client,
-    /// System prompt used for all messages.
+    /// System prompt to use for all messages
     system_prompt: String,
-    /// Tool schemas available to the AI.
-    schema: Vec<Value>,
-    /// Conversation history.
-    messages: Vec<Value>,
+    /// Tool schemas available to the AI
+    schema: Vec<serde_json::Value>,
+    /// Conversation history
+    messages: Vec<serde_json::Value>,
 }
 
-impl SessionActor {
-    /// Create a new session actor.
+impl Session {
+    /// Create a new session with the given configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Provider API configuration
+    /// * `cwd` - Current working directory for context
     #[must_use]
     pub fn new(config: ProviderSettings, cwd: &str) -> Self {
         let client = Client::new(config);
-        let system_prompt = format!("{SYSTEM_PROMPT_BASE} {cwd}");
+        let system_prompt = format!("Concise coding assistant. cwd: {cwd}");
         let schema = crate::api::anthropic::schema::tool_schemas();
 
         Self {
@@ -64,189 +48,223 @@ impl SessionActor {
         }
     }
 
-    /// Send an event to the UI recipient.
-    fn send_event(recipient: &Recipient<UiEvent>, event: UiEvent) {
-        recipient.do_send(event);
-    }
-
-    /// Run the session loop to process messages and handle tool calls.
+    /// Run the session in interactive mode.
     ///
-    /// This method continuously processes API responses and executes tool calls
-    /// until a final assistant message is received.
-    async fn run_session_loop(
-        client: Client,
-        mut messages: Vec<Value>,
-        system_prompt: String,
-        schema: Vec<Value>,
-        recipient: Recipient<UiEvent>,
-    ) -> Result<Vec<Value>> {
-        use futures::stream::StreamExt;
-
+    /// This method enters a REPL loop, continuously reading user input
+    /// and processing commands until the user quits.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader` - Input reader for getting user input
+    /// * `event_sender` - Sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on normal exit, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Command handling fails
+    /// - Agent loop fails
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use neco_core::{Session, StdinReader, ProviderSettings};
+    /// use tokio::sync::mpsc;
+    ///
+    /// # async fn example() -> anyhow::Result<()> {
+    /// let (event_sender, _) = mpsc::unbounded_channel();
+    /// let config = ProviderSettings::from_env().await?;
+    /// let mut session = Session::new(config, "/path");
+    /// let reader = StdinReader;
+    ///
+    /// session.run_interactive(reader, event_sender).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn run_interactive(
+        &mut self,
+        mut reader: impl Reader,
+        event_sender: mpsc::UnboundedSender<CoreEvent>,
+    ) -> Result<()> {
         loop {
-            let mut stream = client
-                .create_message_stream(&messages, &system_prompt, Some(&schema))
-                .await
-                .context("Failed to create message stream")?;
-
-            let mut tool_calls: Vec<ToolCall> = Vec::new();
-            let mut current_text = String::new();
-
-            Self::send_event(&recipient, UiEvent::MessageStart);
-
-            while let Some(event_result) = stream.next().await {
-                let event = event_result.context("Stream error")?;
-
-                match event {
-                    StreamEvent::TextDelta(text) => {
-                        Self::send_event(&recipient, UiEvent::TextDelta(text.clone()));
-                        current_text.push_str(&text);
-                    },
-                    StreamEvent::ToolCallStart { id, name } => {
-                        Self::send_event(&recipient, UiEvent::ToolCallStart { id, name });
-                    },
-                    StreamEvent::ToolCallsReady { calls } => {
-                        tool_calls = calls;
-                    },
-                    StreamEvent::AssistantMessage { text } => {
-                        if !text.is_empty() {
-                            messages.push(json!({
-                                "role": "assistant",
-                                "content": [{"type": "text", "text": text}]
-                            }));
-                        }
-                    },
-                    StreamEvent::MessageStop => {
-                        break;
-                    },
-                    StreamEvent::Error(error) => {
-                        Self::send_event(&recipient, UiEvent::Error(error.clone()));
-                        return Err(anyhow::anyhow!(error));
-                    },
-                    StreamEvent::ToolExecuting { .. }
-                    | StreamEvent::ToolResult { .. }
-                    | StreamEvent::MessageStart => {},
-                }
-            }
-
-            Self::send_event(&recipient, UiEvent::MessageStop);
-
-            if tool_calls.is_empty() {
+            let Some(user_input) = reader.read_line().await else {
                 break;
+            };
+
+            let user_input = user_input.trim();
+            if user_input.is_empty() {
+                continue;
             }
 
-            let mut content_blocks = vec![json!({
-                "type": "text",
-                "text": current_text
-            })];
+            let command = Self::parse_input(user_input);
 
-            for call in &tool_calls {
-                content_blocks.push(json!({
-                    "type": "tool_use",
-                    "id": call.id,
-                    "name": call.name,
-                    "input": call.input
-                }));
-            }
-
-            messages.push(json!({
-                "role": "assistant",
-                "content": content_blocks
-            }));
-
-            for call in tool_calls {
-                Self::send_event(
-                    &recipient,
-                    UiEvent::ToolExecuting {
-                        name: call.name.clone(),
-                    },
-                );
-
-                let result = client
-                    .execute_tool(&call)
-                    .await
-                    .unwrap_or_else(|e| format!("error: {e}"));
-
-                Self::send_event(
-                    &recipient,
-                    UiEvent::ToolResult {
-                        name: call.name.clone(),
-                        result: result.clone(),
-                    },
-                );
-
-                messages.push(json!({
-                    "role": "user",
-                    "content": [{
-                        "type": "tool_result",
-                        "tool_use_id": call.id,
-                        "content": result
-                    }]
-                }));
+            let should_continue = self.handle_command(command, &event_sender).await?;
+            if !should_continue {
+                break;
             }
         }
 
-        Ok(messages)
+        Ok(())
     }
-}
 
-impl Actor for SessionActor {
-    type Context = Context<Self>;
-
-    fn started(&mut self, _ctx: &mut Self::Context) {
-        tracing::debug!("SessionActor started");
+    /// Run the session in single-message mode.
+    ///
+    /// This method processes a single message and returns immediately.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to send to the AI
+    /// * `event_sender` - Sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on success, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Command handling fails
+    /// - Agent loop fails
+    pub async fn run_single(
+        &mut self,
+        message: String,
+        event_sender: mpsc::UnboundedSender<CoreEvent>,
+    ) -> Result<()> {
+        let command = Command::Message(message);
+        self.handle_command(command, &event_sender).await?;
+        Ok(())
     }
-}
 
-impl Handler<ProcessMessage> for SessionActor {
-    type Result = ResponseActFuture<Self, Result<()>>;
-
-    fn handle(&mut self, msg: ProcessMessage, _ctx: &mut Self::Context) -> Self::Result {
-        let content = msg.content;
-        let recipient = msg.ui_recipient;
-
-        self.messages.push(json!({
-            "role": "user",
-            "content": content,
-        }));
-
-        let messages = self.messages.clone();
-        let system_prompt = self.system_prompt.clone();
-        let schema = self.schema.clone();
-        let client = self.client.clone();
-
-        Box::pin(
-            async move {
-                Self::run_session_loop(client, messages, system_prompt, schema, recipient).await
-            }
-            .into_actor(self)
-            .map(|result, act, _ctx| match result {
-                Ok(updated_messages) => {
-                    act.messages = updated_messages;
-                    Ok(())
-                },
-                Err(e) => {
-                    act.messages.pop();
-                    Err(e)
-                },
-            }),
-        )
-    }
-}
-
-impl Handler<ClearHistory> for SessionActor {
-    type Result = ();
-
-    fn handle(&mut self, _msg: ClearHistory, _ctx: &mut Self::Context) {
+    /// Clear the conversation history.
+    pub fn clear_history(&mut self) {
         self.messages.clear();
-        tracing::info!("Conversation history cleared");
     }
-}
 
-impl Handler<GetHistory> for SessionActor {
-    type Result = Vec<Value>;
+    /// Get reference to the API client.
+    #[must_use]
+    pub const fn client(&self) -> &Client {
+        &self.client
+    }
 
-    fn handle(&mut self, _msg: GetHistory, _ctx: &mut Self::Context) -> Self::Result {
-        self.messages.clone()
+    /// Get reference to the messages history.
+    #[must_use]
+    pub fn messages(&self) -> &[serde_json::Value] {
+        &self.messages
+    }
+
+    /// Get mutable reference to the messages history.
+    #[must_use]
+    pub fn messages_mut(&mut self) -> &mut Vec<serde_json::Value> {
+        &mut self.messages
+    }
+
+    /// Get reference to the system prompt.
+    #[must_use]
+    pub fn system_prompt(&self) -> &str {
+        &self.system_prompt
+    }
+
+    /// Get reference to the tool schemas.
+    #[must_use]
+    pub fn schema(&self) -> &[serde_json::Value] {
+        &self.schema
+    }
+
+    /// Run the agent loop with the current session state.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_sender` - Sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on success, Err on error
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - API request fails
+    /// - Tool execution fails
+    /// - Response processing fails
+    pub async fn run_agent_loop(
+        &mut self,
+        event_sender: &mpsc::UnboundedSender<CoreEvent>,
+    ) -> Result<()> {
+        self.client
+            .run_agent_loop_stream(
+                &mut self.messages,
+                &self.system_prompt,
+                &self.schema,
+                Some(event_sender),
+            )
+            .await
+            .context("Agent loop error")
+    }
+
+    /// Parse user input into a command.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Raw user input string
+    ///
+    /// # Returns
+    ///
+    /// Parsed command
+    fn parse_input(input: &str) -> Command {
+        match input {
+            "/q" | "exit" => Command::Quit,
+            "/c" => Command::Clear,
+            msg => Command::Message(msg.to_string()),
+        }
+    }
+
+    /// Handle a user command.
+    ///
+    /// # Arguments
+    ///
+    /// * `command` - The command to handle
+    /// * `event_sender` - Sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(true) to continue the loop, Ok(false) to exit, Err on error
+    async fn handle_command(
+        &mut self,
+        command: Command,
+        event_sender: &mpsc::UnboundedSender<CoreEvent>,
+    ) -> Result<bool> {
+        match command {
+            Command::Quit => Ok(false),
+            Command::Clear => {
+                self.clear_history();
+                let _ = event_sender.send(CoreEvent::Error("Conversation cleared".to_string()));
+                Ok(true)
+            },
+            Command::Message(msg) => {
+                self.messages.push(json!({
+                    "role": "user",
+                    "content": msg,
+                }));
+
+                if let Err(e) = self
+                    .client
+                    .run_agent_loop_stream(
+                        &mut self.messages,
+                        &self.system_prompt,
+                        &self.schema,
+                        Some(event_sender),
+                    )
+                    .await
+                {
+                    let _ = event_sender.send(CoreEvent::Error(format!("Error: {e}")));
+                }
+
+                Ok(true)
+            },
+        }
     }
 }
 
@@ -255,18 +273,45 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_process_message_content() {
-        let content = "Hello".to_string();
-        assert_eq!(content, "Hello");
+    fn test_session_parse_input() {
+        assert_eq!(Session::parse_input("/q"), Command::Quit);
+        assert_eq!(Session::parse_input("exit"), Command::Quit);
+        assert_eq!(Session::parse_input("/c"), Command::Clear);
+        assert_eq!(
+            Session::parse_input("hello"),
+            Command::Message("hello".to_string())
+        );
     }
 
-    #[test]
-    fn test_clear_history() {
-        let _ = ClearHistory;
+    #[tokio::test]
+    async fn test_session_clear_history() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults();
+        drop(registry);
+
+        let config = ProviderSettings::from_env().await.unwrap();
+        let mut session = Session::new(config, "/test");
+
+        session
+            .messages
+            .push(json!({"role": "user", "content": "test"}));
+        assert!(!session.messages.is_empty());
+
+        session.clear_history();
+        assert!(session.messages.is_empty());
     }
 
-    #[test]
-    fn test_get_history() {
-        let _ = GetHistory;
+    #[tokio::test]
+    async fn test_session_new() {
+        let mut registry = crate::ProviderRegistry::global().write().await;
+        registry.register_defaults();
+        drop(registry);
+
+        let config = ProviderSettings::from_env().await.unwrap();
+        let session = Session::new(config, "/test");
+
+        assert!(session.messages.is_empty());
+        assert!(!session.system_prompt.is_empty());
+        assert!(!session.schema.is_empty());
     }
 }

@@ -1,72 +1,97 @@
-//! Core event messages for nanocode using Actix Actor model.
+//! Core event types for nanocode
 //!
-//! Defines the message types used for communication between actors
-//! in the actor-based event system.
+//! Defines the core events used throughout the application for communication
+//! between different components of the system.
 
-use actix::{Message, Recipient};
 use serde::{Deserialize, Serialize};
 
-/// Core event enumeration for UI updates.
-#[derive(Debug, Clone, Serialize, Deserialize, Message)]
-#[rtype(result = "()")]
-pub enum UiEvent {
-    /// Text delta event for incremental text output.
+/// Core event enumeration representing different types of events
+/// that can occur during the execution of the system.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CoreEvent {
+    /// Text delta event, representing incremental text output
+    ///
+    /// This event is used to stream text output as it's generated,
+    /// allowing for real-time display of content.
     TextDelta(String),
-    /// Tool call start event.
+
+    /// Tool call start event, indicating the beginning of a tool execution
+    ///
+    /// This event marks when a tool is about to be called, providing
+    /// information about the tool's name and unique identifier.
     ToolCallStart {
-        /// Unique identifier for the tool call.
+        /// Unique identifier for the tool call
         id: String,
-        /// Name of the tool.
+        /// Name of the tool being called
         name: String,
     },
-    /// Tool executing event.
+
+    /// Tool executing event, indicating that a tool is currently being executed
+    ///
+    /// This event is emitted when a tool is actively processing and
+    /// executing its operation.
     ToolExecuting {
-        /// Name of the tool.
+        /// Name of the tool being executed
         name: String,
     },
-    /// Tool result event.
+
+    /// Tool result event, containing the result of a tool execution
+    ///
+    /// This event carries the output or result from a completed tool call,
+    /// which can be used for further processing or display.
     ToolResult {
-        /// Name of the tool.
+        /// Name of the tool that produced the result
         name: String,
-        /// Result content.
+        /// The result data from the tool execution
         result: String,
     },
-    /// Error event.
+
+    /// Error event, representing an error that occurred during execution
+    ///
+    /// This event carries error information when something goes wrong
+    /// in the system, allowing for proper error handling and display.
     Error(String),
-    /// Message start event.
+
+    /// Message start event, marking the beginning of a new message
+    ///
+    /// This event signals the start of a new conversation or message
+    /// in the system, used to track message boundaries.
     MessageStart,
-    /// Message stop event.
+
+    /// Message stop event, marking the end of a message
+    ///
+    /// This event signals the completion of a message or conversation,
+    /// used to indicate when processing should stop or continue.
     MessageStop,
 }
-
-/// Type alias for UI event recipient.
-pub type UiRecipient = Recipient<UiEvent>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_ui_event_serialization() {
-        let event = UiEvent::TextDelta("Hello, world!".to_string());
+    fn test_core_event_serialization() {
+        let event = CoreEvent::TextDelta("Hello, world!".to_string());
         let serialized = serde_json::to_string(&event).unwrap();
-        let deserialized: UiEvent = serde_json::from_str(&serialized).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
+
         match deserialized {
-            UiEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
+            CoreEvent::TextDelta(text) => assert_eq!(text, "Hello, world!"),
             _ => panic!("Wrong event type"),
         }
     }
 
     #[test]
-    fn test_ui_event_tool_call_start() {
-        let event = UiEvent::ToolCallStart {
+    fn test_core_event_tool_call_start() {
+        let event = CoreEvent::ToolCallStart {
             id: "test-id".to_string(),
             name: "test-tool".to_string(),
         };
         let serialized = serde_json::to_string(&event).unwrap();
-        let deserialized: UiEvent = serde_json::from_str(&serialized).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
+
         match deserialized {
-            UiEvent::ToolCallStart { id, name } => {
+            CoreEvent::ToolCallStart { id, name } => {
                 assert_eq!(id, "test-id");
                 assert_eq!(name, "test-tool");
             },
@@ -75,15 +100,16 @@ mod tests {
     }
 
     #[test]
-    fn test_ui_event_tool_result() {
-        let event = UiEvent::ToolResult {
+    fn test_core_event_tool_result() {
+        let event = CoreEvent::ToolResult {
             name: "read".to_string(),
             result: "File content".to_string(),
         };
         let serialized = serde_json::to_string(&event).unwrap();
-        let deserialized: UiEvent = serde_json::from_str(&serialized).unwrap();
+        let deserialized: CoreEvent = serde_json::from_str(&serialized).unwrap();
+
         match deserialized {
-            UiEvent::ToolResult { name, result } => {
+            CoreEvent::ToolResult { name, result } => {
                 assert_eq!(name, "read");
                 assert_eq!(result, "File content");
             },
@@ -92,12 +118,14 @@ mod tests {
     }
 
     #[test]
-    fn test_ui_event_error() {
-        let event = UiEvent::Error("Something went wrong".to_string());
-        let serialized = serde_json::to_string(&event).unwrap();
-        let deserialized: UiEvent = serde_json::from_str(&serialized).unwrap();
-        match deserialized {
-            UiEvent::Error(msg) => assert_eq!(msg, "Something went wrong"),
+    fn test_core_event_clone() {
+        let original = CoreEvent::TextDelta("test".to_string());
+        let cloned = original.clone();
+
+        match (original, cloned) {
+            (CoreEvent::TextDelta(s1), CoreEvent::TextDelta(s2)) => {
+                assert_eq!(s1, s2);
+            },
             _ => panic!("Wrong event type"),
         }
     }

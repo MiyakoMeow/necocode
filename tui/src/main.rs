@@ -1,14 +1,12 @@
-//! nanocode - minimal Claude code alternative in Rust using Actix Actor model.
+//! nanocode - minimal Claude code alternative in Rust
 
-use actix::prelude::*;
-use anyhow::Context as _;
-use anyhow::Result;
+use anyhow::Context;
 use clap::Parser;
 use crossterm::style::{Attribute, Stylize};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::process::ExitCode;
-use tokio as _;
+use tokio::sync::mpsc;
 
 mod colors;
 mod logging;
@@ -18,9 +16,9 @@ mod separator;
 pub use colors::*;
 pub use separator::separator;
 
-use neco_core::{App, ClearHistory, Config, ProviderRegistry, ProviderSettings, UiEvent};
+use neco_core::{App, Config, CoreEvent, ProviderRegistry};
 
-/// Initialize the logging system.
+/// Initialize the logging system, returns success status.
 fn setup_logging(config: &Config) -> bool {
     let log_dir = Path::new(&config.cwd).join("logs");
     match logging::init_logging(&log_dir) {
@@ -32,61 +30,44 @@ fn setup_logging(config: &Config) -> bool {
     }
 }
 
-/// AI programming assistant - Claude Code Rust implementation.
+/// AI programming assistant - Claude Code Rust implementation
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct CliArgs {
-    /// Send message directly and execute (non-interactive mode).
+    /// Send message directly and execute (non-interactive mode)
     #[arg(short = 'm', long = "message")]
     message: Option<String>,
 
-    /// Model specification (e.g., "anthropic/claude-opus-4-5" or "claude-sonnet-4-5").
+    /// Model specification (e.g., "anthropic/claude-opus-4-5" or "claude-sonnet-4-5")
     #[arg(short = 'M', long = "model")]
     model: Option<String>,
 }
 
-/// UI Actor for handling UI events and rendering.
-pub struct UiActor;
-
-impl Default for UiActor {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl UiActor {
-    /// Create a new UI actor.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self
-    }
-
-    /// Render a UI event to stdout.
-    fn render_event(event: &UiEvent) {
+/// Async task to handle core events (rendering logic).
+async fn handle_core_events(
+    mut receiver: mpsc::UnboundedReceiver<CoreEvent>,
+) -> anyhow::Result<()> {
+    while let Some(event) = receiver.recv().await {
         match event {
-            UiEvent::TextDelta(text) => {
+            CoreEvent::TextDelta(text) => {
                 output::print(format_args!("{text}"));
-                io::stdout().flush().ok();
+                io::stdout().flush().context("Failed to flush stdout")?;
             },
-            UiEvent::ToolCallStart { id, name } => {
+            CoreEvent::ToolCallStart { id, name } => {
                 tracing::debug!(tool = %name, tool_id = %id, "Tool call started");
-                output::println(format_args!(
-                    "\n🔧 {} (id: {})",
-                    name.clone().yellow().bold(),
-                    id
-                ));
+                output::println(format_args!("\n🔧 {} (id: {})", name.yellow().bold(), id));
             },
-            UiEvent::ToolExecuting { name } => {
+            CoreEvent::ToolExecuting { name } => {
                 tracing::info!(tool = %name, "Tool executing");
                 output::println(format_args!("{}⚙️ {} executing...", Attribute::Bold, name));
             },
-            UiEvent::ToolResult { name, result } => {
+            CoreEvent::ToolResult { name, result } => {
                 tracing::debug!(tool = %name, result_len = result.len(), "Tool result received");
-                output::println(format_args!("\n📝 {} Result:", name.clone().green().bold()));
+                output::println(format_args!("\n📝 {} Result:", name.green().bold()));
                 output::println(format_args!("{result}"));
                 output::print(format_args!("{}", separator()));
             },
-            UiEvent::Error(error) => {
+            CoreEvent::Error(error) => {
                 if error.contains("Conversation cleared") {
                     output::println(format_args!("{}", "⏺ Cleared conversation".green()));
                 } else {
@@ -95,30 +76,19 @@ impl UiActor {
                 }
                 output::print(format_args!("{}", separator()));
             },
-            UiEvent::MessageStart => {
+            CoreEvent::MessageStart => {
                 tracing::debug!("Message started");
                 output::print(format_args!("{}", separator()));
             },
-            UiEvent::MessageStop => {
+            CoreEvent::MessageStop => {
                 tracing::debug!("Message stopped");
                 output::println(format_args!(""));
                 output::print(format_args!("{}", separator()));
             },
         }
-        io::stdout().flush().ok();
+        io::stdout().flush().context("Failed to flush stdout")?;
     }
-}
-
-impl Actor for UiActor {
-    type Context = Context<Self>;
-}
-
-impl Handler<UiEvent> for UiActor {
-    type Result = ();
-
-    fn handle(&mut self, msg: UiEvent, _ctx: &mut Self::Context) {
-        Self::render_event(&msg);
-    }
+    Ok(())
 }
 
 fn main() -> ExitCode {
@@ -126,7 +96,7 @@ fn main() -> ExitCode {
     let config = Config::from_env();
     let _logging_enabled = setup_logging(&config);
 
-    if let Err(e) = run(&args, &config) {
+    if let Err(e) = run(&args, config) {
         tracing::error!("Application error: {e}");
         return ExitCode::FAILURE;
     }
@@ -134,62 +104,73 @@ fn main() -> ExitCode {
 }
 
 /// Run the main application logic.
-fn run(args: &CliArgs, config: &Config) -> Result<()> {
-    actix::System::new().block_on(async {
+///
+/// This function initializes the provider registry, starts the application,
+/// and handles the event loop for both interactive and single-message modes.
+///
+/// # Arguments
+///
+/// * `args` - Parsed command line arguments
+/// * `config` - Application configuration loaded from environment
+///
+/// # Returns
+///
+/// Returns `Ok(ExitCode::SUCCESS)` on successful execution,
+/// or an error if initialization or execution fails.
+fn run(args: &CliArgs, config: Config) -> anyhow::Result<ExitCode> {
+    let rt = tokio::runtime::Runtime::new().context("Failed to create Tokio runtime")?;
+    rt.block_on(async {
         let mut registry = ProviderRegistry::global().write().await;
         registry.register_defaults();
-        drop(registry);
+    });
 
-        let provider_config = if let Some(model_str) = &args.model {
-            ProviderSettings::from_model_string(model_str)?
-        } else {
-            ProviderSettings::from_env().await?
-        };
+    let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
-        output::println(format_args!(
-            "{} | {} | {} | {}\n",
-            "neco".bold(),
-            provider_config.provider_display_name().green().bold(),
-            provider_config.model.clone().dim(),
-            provider_config.masked_api_key().yellow(),
-        ));
+    let (event_receiver, main_handle, provider_config) = App::run(
+        config,
+        input_receiver,
+        args.message.clone(),
+        args.model.clone(),
+        &rt,
+    )
+    .context("Failed to start application")?;
 
-        let ui_actor = UiActor::new().start();
-        let ui_recipient = ui_actor.recipient();
+    output::println(format_args!(
+        "{} | {} | {} | {}\n",
+        "neco".bold(),
+        provider_config.provider_display_name().green().bold(),
+        provider_config.model.clone().dim(),
+        provider_config.masked_api_key().yellow(),
+    ));
 
-        let session_addr = App::create_session(provider_config, config);
+    let render_handle = rt.spawn(async move {
+        if let Err(e) = handle_core_events(event_receiver).await {
+            tracing::error!("Render error: {e}");
+        }
+    });
 
-        if let Some(message) = &args.message {
-            App::process_message(&session_addr, message.clone(), ui_recipient)
-                .await
-                .context("Failed to process message")?;
-        } else {
-            let stdin = io::stdin();
-            for line in stdin.lock().lines() {
-                let Ok(input) = line else {
-                    break;
-                };
-
-                let trimmed = input.trim();
-                if trimmed.is_empty() {
-                    continue;
-                }
-
-                match trimmed {
-                    "/q" | "exit" => break,
-                    "/c" => {
-                        session_addr.send(ClearHistory).await.ok();
-                        ui_recipient.do_send(UiEvent::Error("Conversation cleared".to_string()));
-                    },
-                    msg => {
-                        App::process_message(&session_addr, msg.to_string(), ui_recipient.clone())
-                            .await
-                            .context("Failed to process message")?;
-                    },
-                }
+    if args.message.is_none() {
+        let stdin = io::stdin();
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(input) => {
+                    if input_sender.send(input).is_err() {
+                        break;
+                    }
+                },
+                Err(_) => break,
             }
         }
+    }
 
-        Ok(())
-    })
+    let result = rt.block_on(async {
+        let _ = render_handle.await;
+        match main_handle.await {
+            Ok(result) => result,
+            Err(e) => Err(e).context("Main task failed"),
+        }
+    });
+
+    result.context("Application execution failed")?;
+    Ok(ExitCode::SUCCESS)
 }
