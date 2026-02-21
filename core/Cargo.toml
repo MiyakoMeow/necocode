@@ -27,7 +27,6 @@ toml.workspace = true
 dirs.workspace = true
 indexmap.workspace = true
 tracing.workspace = true
-actix.workspace = true
 
 [dev-dependencies]
 serial_test = "3"

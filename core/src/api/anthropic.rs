@@ -1,4 +1,4 @@
-//! Anthropic API client for nanocode using Actor model.
+//! Anthropic API client for nanocode.
 //!
 //! Handles API calls and the agentic loop for tool execution.
 
@@ -6,173 +6,169 @@ pub mod models;
 pub mod schema;
 
 use crate::config::ProviderSettings;
+use crate::events;
 use crate::tools;
 use anyhow::Result;
 use futures::stream::Stream;
 use reqwest::Client as HttpClient;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
-/// API error type.
+/// API error type
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ApiError {
-    /// Network connection error.
+    /// Network connection error
     #[error("Network error: {0}")]
     NetworkError(String),
 
-    /// HTTP request error.
+    /// HTTP request error
     #[error("HTTP error {status}: {message}")]
     HttpError {
-        /// HTTP status code.
+        /// HTTP status code
         status: u16,
-        /// Error message.
+        /// Error message
         message: String,
     },
 
-    /// Data parsing error.
+    /// Data parsing error
     #[error("Parse error: {0}")]
     ParseError(String),
 
-    /// Stream response error.
+    /// Stream response error
     #[error("Stream error: {0}")]
     StreamError(String),
 
-    /// API returned error.
+    /// API returned error
     #[error("API error: {0}")]
     Api(String),
 }
 
-/// Stream event type for actor communication.
+/// Stream response event
 #[derive(Debug, Clone)]
 pub enum StreamEvent {
-    /// Text delta event for incremental text output.
-    TextDelta(String),
-    /// Tool call start event.
-    ToolCallStart {
-        /// Unique identifier for the tool call.
-        id: String,
-        /// Name of the tool being called.
-        name: String,
-    },
-    /// Tool executing event.
-    ToolExecuting {
-        /// Name of the tool being executed.
-        name: String,
-    },
-    /// Tool result event.
-    ToolResult {
-        /// Name of the tool.
-        name: String,
-        /// Result of the tool execution.
-        result: String,
-    },
-    /// Error event.
-    Error(String),
-    /// Message start event.
+    /// Message start event, indicates the start of stream response
     MessageStart,
-    /// Message stop event.
-    MessageStop,
-    /// Final assistant message.
-    AssistantMessage {
-        /// Text content.
-        text: String,
+    /// Content block start event, contains content block type and index
+    ContentBlockStart {
+        /// Index position of the content block in the message
+        index: u32,
+        /// Specific content of the content block
+        content_block: ContentBlock,
     },
-    /// Tool calls ready to execute.
-    ToolCallsReady {
-        /// Tool calls to execute.
-        calls: Vec<ToolCall>,
+    /// Content block delta event, contains delta data
+    ContentBlockDelta {
+        /// Index position of the content block in the message
+        index: u32,
+        /// Delta data
+        delta: Delta,
+    },
+    /// Content block stop event, indicates a content block is completed
+    ContentBlockStop {
+        /// Index position of the content block in the message
+        index: u32,
+    },
+    /// Message delta event, contains message-level delta data
+    MessageDelta,
+    /// Message stop event, indicates the end of stream response
+    MessageStop,
+    /// Error event, contains API error information
+    Error {
+        /// Error details
+        error: ApiError,
     },
 }
 
-/// SSE event stream type.
-pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent, ApiError>> + Send>>;
-
-/// Content block type.
+/// Content block type
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum ContentBlock {
-    /// Text content block.
+    /// Text content block, contains plain text content
     #[serde(rename = "text")]
     Text {
-        /// Text content.
+        /// Text content
         text: String,
     },
-    /// Tool call content block.
+    /// Tool call content block, describes the function call to be executed
     #[serde(rename = "tool_use")]
     ToolUse {
-        /// Unique identifier for the tool call.
+        /// Unique identifier for the tool call
         id: String,
-        /// Name of the tool.
+        /// Name of the tool (function)
         name: String,
-        /// Input parameters.
+        /// Input parameters for the tool call
         input: Value,
     },
 }
 
-/// Delta data type.
+/// Delta data
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum Delta {
-    /// Text delta.
+    /// Text delta, contains newly added text content
     #[serde(rename = "text_delta")]
     Text {
-        /// Incremental text content.
+        /// Incremental text content
         text: String,
     },
-    /// JSON delta for tool input.
+    /// JSON delta, contains incremental part of JSON structure data
     #[serde(rename = "input_json_delta")]
     InputJson {
-        /// Partial JSON data.
+        /// Partial JSON data, used to build complete JSON structure
         partial_json: String,
     },
 }
 
-/// Tool call structure.
-#[derive(Debug, Clone)]
-pub struct ToolCall {
-    /// Unique identifier.
-    pub id: String,
-    /// Tool name.
-    pub name: String,
-    /// Input parameters.
-    pub input: Value,
-}
+/// SSE event stream type
+pub type EventStream = Pin<Box<dyn Stream<Item = Result<StreamEvent, ApiError>> + Send>>;
 
-/// Tool call collector for aggregating tool calls from stream.
+/// Tool call collector
 pub struct ToolCallCollector {
-    /// Vector of pending tool calls being collected.
+    /// List of pending tool calls
     calls: Vec<PendingToolCall>,
 }
 
-/// Pending tool call being aggregated from stream events.
+/// Pending tool call
 #[derive(Debug, Clone)]
 struct PendingToolCall {
-    /// Unique identifier for the tool call.
+    /// Unique identifier for the tool call
     id: String,
-    /// Name of the tool to execute.
+    /// Name of the tool (function)
     name: String,
-    /// Buffer for accumulating JSON input data.
+    /// Buffer for tool input parameters, used to accumulate incremental JSON data
     input_buffer: String,
-    /// Whether the tool call has been fully received.
+    /// Whether processing is completed
     completed: bool,
 }
 
+/// Completed tool call
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolCall {
+    /// Unique identifier for the tool call
+    pub id: String,
+    /// Name of the tool (function)
+    pub name: String,
+    /// Input parameters for the tool call
+    pub input: Value,
+}
+
 impl ToolCallCollector {
-    /// Create a new tool call collector.
+    /// Create a new tool call collector
     #[must_use]
     pub fn new() -> Self {
         Self { calls: Vec::new() }
     }
 
-    /// Process an internal event and update tool calls.
-    fn process_event(&mut self, event: &InternalEvent) {
+    /// Process stream events, collect tool calls
+    pub fn process_event(&mut self, event: &StreamEvent) {
         match event {
-            InternalEvent::ContentBlockStart {
+            StreamEvent::ContentBlockStart {
                 content_block: ContentBlock::ToolUse { id, name, input },
                 index,
             } => {
+                // Extend calls vector to accommodate new index
                 while self.calls.len() <= *index as usize {
                     self.calls.push(PendingToolCall {
                         id: String::new(),
@@ -195,16 +191,16 @@ impl ToolCallCollector {
                     };
                 }
             },
-            InternalEvent::ContentBlockStart {
+            StreamEvent::ContentBlockStart {
                 content_block: ContentBlock::Text { .. },
                 ..
             }
-            | InternalEvent::MessageStart
-            | InternalEvent::MessageDelta
-            | InternalEvent::MessageStop
-            | InternalEvent::Error { .. } => {},
+            | StreamEvent::MessageStart
+            | StreamEvent::MessageDelta
+            | StreamEvent::MessageStop
+            | StreamEvent::Error { .. } => {}, // These events don't need special handling
 
-            InternalEvent::ContentBlockDelta { delta, index } => {
+            StreamEvent::ContentBlockDelta { delta, index } => {
                 let Some(call) = self.calls.get_mut(*index as usize) else {
                     return;
                 };
@@ -214,7 +210,7 @@ impl ToolCallCollector {
                 call.input_buffer.push_str(partial_json);
             },
 
-            InternalEvent::ContentBlockStop { index } => {
+            StreamEvent::ContentBlockStop { index } => {
                 let Some(call) = self.calls.get_mut(*index as usize) else {
                     return;
                 };
@@ -223,13 +219,13 @@ impl ToolCallCollector {
         }
     }
 
-    /// Check if there are completed tool calls.
+    /// Check if there are completed tool calls
     #[must_use]
     pub fn has_completed_calls(&self) -> bool {
         self.calls.iter().any(|c| c.completed)
     }
 
-    /// Extract all completed tool calls.
+    /// Extract all completed tool calls and clear
     pub fn take_completed(&mut self) -> Vec<ToolCall> {
         let completed = self
             .calls
@@ -246,7 +242,7 @@ impl ToolCallCollector {
         completed
     }
 
-    /// Check if the collector is active.
+    /// Check if the collector is active (has pending tool calls)
     #[must_use]
     pub fn is_active(&self) -> bool {
         !self.calls.is_empty()
@@ -259,161 +255,117 @@ impl Default for ToolCallCollector {
     }
 }
 
-/// Internal event types parsed from SSE stream.
-#[derive(Debug, Clone)]
-enum InternalEvent {
-    /// Message start event from API.
-    MessageStart,
-    /// Content block start event with index and content.
-    ContentBlockStart {
-        /// Index of the content block.
-        index: u32,
-        /// The content block (text or tool use).
-        content_block: ContentBlock,
-    },
-    /// Content block delta event with incremental data.
-    ContentBlockDelta {
-        /// Index of the content block.
-        index: u32,
-        /// Delta data (text or JSON).
-        delta: Delta,
-    },
-    /// Content block stop event.
-    ContentBlockStop {
-        /// Index of the content block.
-        index: u32,
-    },
-    /// Message delta event.
-    MessageDelta,
-    /// Message stop event.
-    MessageStop,
-    /// Error event from API.
-    Error {
-        /// The error details.
-        error: ApiError,
-    },
-}
-
-/// Parse SSE response stream into internal events.
-fn parse_sse_stream(
-    response: reqwest::Response,
-) -> Pin<Box<dyn Stream<Item = Result<InternalEvent, ApiError>> + Send>> {
+/// Parse SSE response stream
+fn parse_sse_stream(response: reqwest::Response) -> EventStream {
     use futures::stream::StreamExt;
 
     Box::pin(async_stream::stream! {
-        let mut buffer = String::new();
-        let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            let mut stream = response.bytes_stream();
 
-        while let Some(chunk_result) = stream.next().await {
-            let chunk = match chunk_result {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    yield Err(ApiError::StreamError(format!("Failed to read stream: {e}")));
-                    continue;
-                }
-            };
-
-            let chunk_str = match String::from_utf8(chunk.to_vec()) {
-                Ok(s) => s,
-                Err(e) => {
-                    yield Err(ApiError::ParseError(format!("Invalid UTF-8: {e}")));
-                    continue;
-                }
-            };
-
-            buffer.push_str(&chunk_str);
-
-            while let Some(newline_pos) = buffer.find('\n') {
-                let line = buffer[..newline_pos].to_string();
-                buffer = buffer[newline_pos + 1..].to_string();
-
-                if line.is_empty() {
-                    continue;
-                }
-
-                let Some(data) = line.strip_prefix("data: ") else {
-                    continue;
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = match chunk_result {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        yield Err(ApiError::StreamError(format!("Failed to read stream: {e}")));
+                        continue;
+                    }
                 };
 
-                if data == "[DONE]" {
-                    yield Ok(InternalEvent::MessageStop);
-                    continue;
-                }
-
-                let Ok(value) = serde_json::from_str::<Value>(data) else {
-                    yield Err(ApiError::ParseError("Failed to parse SSE data".to_string()));
-                    continue;
+                // Convert bytes to string and process
+                let chunk_str = match String::from_utf8(chunk.to_vec()) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        yield Err(ApiError::ParseError(format!("Invalid UTF-8: {e}")));
+                        continue;
+                    }
                 };
 
-                let Some(event_type) = value.get("type").and_then(|v| v.as_str()) else {
-                    continue;
-                };
+                buffer.push_str(&chunk_str);
 
-                let event = match event_type {
-                    "message_start" => InternalEvent::MessageStart,
-                    "content_block_start" => {
-                        let Some(block) = value.get("content_block") else {
+                // Split by lines
+                while let Some(newline_pos) = buffer.find('\n') {
+                    let line = buffer[..newline_pos].to_string();
+                    buffer = buffer[newline_pos + 1..].to_string();
+
+                    // Skip empty lines
+                    if line.is_empty() {
+                        continue;
+                    }
+
+                    // SSE format parsing
+                    if let Some(data) = line.strip_prefix("data: ") {
+                        // Skip "[DONE]" marker
+                        if data == "[DONE]" {
+                            yield Ok(StreamEvent::MessageStop);
                             continue;
-                        };
-                        InternalEvent::ContentBlockStart {
-                            index: value.get("index")
-                                .and_then(Value::as_u64)
-                                .unwrap_or(0)
-                                .try_into()
-                                .unwrap_or(0),
-                            content_block: serde_json::from_value(block.clone())
-                                .unwrap_or(ContentBlock::Text { text: String::new() }),
                         }
-                    },
-                    "content_block_delta" => InternalEvent::ContentBlockDelta {
-                        index: value.get("index")
-                            .and_then(Value::as_u64)
-                            .unwrap_or(0)
-                            .try_into()
-                            .unwrap_or(0),
-                        delta: serde_json::from_value(
-                            value.get("delta").cloned().unwrap_or_default()
-                        ).unwrap_or(Delta::Text { text: String::new() }),
-                    },
-                    "content_block_stop" => InternalEvent::ContentBlockStop {
-                        index: value.get("index")
-                            .and_then(Value::as_u64)
-                            .unwrap_or(0)
-                            .try_into()
-                            .unwrap_or(0),
-                    },
-                    "message_delta" => InternalEvent::MessageDelta,
-                    "message_stop" => InternalEvent::MessageStop,
-                    "error" => InternalEvent::Error {
-                        error: ApiError::Api(
-                            value.get("error")
-                                .and_then(|e| e.get("message"))
-                                .and_then(|m| m.as_str())
-                                .unwrap_or("Unknown error")
-                                .to_string()
-                        ),
-                    },
-                    _ => continue,
-                };
-                yield Ok(event);
+
+                        // Parse JSON
+                        match serde_json::from_str::<Value>(data) {
+                            Ok(value) => {
+                                if let Some(event_type) = value.get("type").and_then(|v| v.as_str()) {
+                                    let event = match event_type {
+                                        "message_start" => StreamEvent::MessageStart,
+                                        "content_block_start" => {
+                                            if let Some(block) = value.get("content_block") {
+    StreamEvent::ContentBlockStart {
+                                            index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                            content_block: serde_json::from_value(block.clone())
+                                                .unwrap_or(ContentBlock::Text { text: String::new() }),
+                                        }
+                                            } else {
+                                                continue;
+                                            }
+                                        }
+                                        "content_block_delta" => {
+    StreamEvent::ContentBlockDelta {
+                                                index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                                delta: serde_json::from_value(value.get("delta").cloned().unwrap_or_default())
+                                                    .unwrap_or(Delta::Text { text: String::new() }),
+                                            }
+                                        }
+    "content_block_stop" => StreamEvent::ContentBlockStop {
+                                            index: value.get("index").and_then(Value::as_u64).unwrap_or(0).try_into().unwrap_or(0),
+                                        },
+                                        "message_delta" => StreamEvent::MessageDelta,
+                                        "message_stop" => StreamEvent::MessageStop,
+                                        "error" => StreamEvent::Error {
+                                            error: ApiError::Api(
+                                                value.get("error")
+                                                    .and_then(|e| e.get("message"))
+                                                    .and_then(|m| m.as_str())
+                                                    .unwrap_or("Unknown error")
+                                                    .to_string()
+                                            ),
+                                        },
+                                        _ => continue,
+                                    };
+                                    yield Ok(event);
+                                }
+                            }
+                            Err(e) => {
+                                yield Err(ApiError::ParseError(format!("Failed to parse SSE data: {e}")));
+                            }
+                        }
+                    }
+                }
             }
-        }
-    })
+        })
 }
 
-/// API client for communicating with LLM providers.
-#[derive(Clone)]
+/// API client.
 pub struct Client {
-    /// HTTP client for making requests.
+    /// HTTP client for making API requests
     http: HttpClient,
-    /// Provider configuration (API key, base URL, model).
+    /// API configuration, contains key, base URL and other information
     config: ProviderSettings,
-    /// Registry of available tools.
+    /// Tool registry for executing tools
     tool_registry: Arc<tools::ToolRegistry>,
 }
 
 impl Client {
-    /// Create a new API client.
+    /// Create a new API client with the given configuration.
     #[must_use]
     pub fn new(config: ProviderSettings) -> Self {
         Self {
@@ -423,33 +375,24 @@ impl Client {
         }
     }
 
-    /// Create a client with existing HTTP client.
-    #[must_use]
-    pub fn with_http(config: ProviderSettings, http: HttpClient) -> Self {
-        Self {
-            http,
-            config,
-            tool_registry: Arc::new(tools::ToolRegistry::new()),
-        }
-    }
-
-    /// Get the tool registry.
-    #[must_use]
-    pub fn tool_registry(&self) -> &tools::ToolRegistry {
-        &self.tool_registry
-    }
-
-    /// Get the configuration.
-    #[must_use]
-    pub fn config(&self) -> &ProviderSettings {
-        &self.config
-    }
-
-    /// Create a message stream.
+    /// Send stream message request
+    ///
+    /// # Arguments
+    ///
+    /// * `messages` - Conversation history
+    /// * `system_prompt` - System prompt for the model
+    /// * `tools` - Optional tool definitions
+    ///
+    /// # Returns
+    ///
+    /// Stream of events from the API
     ///
     /// # Errors
     ///
-    /// Returns error if network request fails.
+    /// Returns error if:
+    /// - Network request fails
+    /// - API returns error response
+    /// - Response parsing fails
     pub async fn create_message_stream(
         &self,
         messages: &[Value],
@@ -481,6 +424,7 @@ impl Client {
             .await
             .map_err(|e| ApiError::NetworkError(e.to_string()))?;
 
+        // Check status code
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
@@ -490,80 +434,208 @@ impl Client {
             });
         }
 
-        Ok(Self::process_stream_events(parse_sse_stream(response)))
+        // Return parsed SSE stream
+        Ok(parse_sse_stream(response))
     }
 
-    /// Process internal event stream into public stream events.
+    /// Run the agentic loop: keep calling API until no more tool calls.
     ///
-    /// Converts low-level SSE events into high-level stream events for consumption.
-    fn process_stream_events(
-        internal_stream: Pin<Box<dyn Stream<Item = Result<InternalEvent, ApiError>> + Send>>,
-    ) -> EventStream {
-        use futures::stream::StreamExt;
-
-        Box::pin(async_stream::stream! {
-            let mut internal_stream = internal_stream;
-            let mut tool_collector = ToolCallCollector::new();
-            let mut current_text = String::new();
-
-            yield Ok(StreamEvent::MessageStart);
-
-            while let Some(event_result) = internal_stream.next().await {
-                let event = match event_result {
-                    Ok(e) => e,
-                    Err(e) => {
-                        yield Err(e);
-                        continue;
-                    }
-                };
-
-                tool_collector.process_event(&event);
-
-                match &event {
-                    InternalEvent::ContentBlockDelta {
-                        delta: Delta::Text { text },
-                        ..
-                    } => {
-                        yield Ok(StreamEvent::TextDelta(text.clone()));
-                        current_text.push_str(text);
-                    },
-                    InternalEvent::ContentBlockStart {
-                        content_block: ContentBlock::ToolUse { id, name, .. },
-                        ..
-                    } => {
-                        yield Ok(StreamEvent::ToolCallStart {
-                            id: id.clone(),
-                            name: name.clone(),
-                        });
-                    },
-                    InternalEvent::Error { error } => {
-                        yield Ok(StreamEvent::Error(error.to_string()));
-                    },
-                    InternalEvent::MessageStop => {
-                        if tool_collector.has_completed_calls() {
-                            let calls = tool_collector.take_completed();
-                            yield Ok(StreamEvent::ToolCallsReady { calls });
-                        } else {
-                            yield Ok(StreamEvent::AssistantMessage { text: current_text.clone() });
-                            yield Ok(StreamEvent::MessageStop);
-                        }
-                        current_text.clear();
-                        break;
-                    },
-                    _ => {},
-                }
-            }
-        })
-    }
-
-    /// Execute a tool call.
+    /// # Arguments
+    ///
+    /// * `messages` - Mutable reference to conversation history
+    /// * `system_prompt` - System prompt for the model
+    /// * `tools` - Tool definitions
+    /// * `event_sender` - Optional sender for core events
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) on success, Err on failure
     ///
     /// # Errors
     ///
-    /// Returns error if tool execution fails.
-    pub async fn execute_tool(&self, call: &ToolCall) -> Result<String> {
-        let input_value = json!(call.input);
-        self.tool_registry.execute(&call.name, &input_value).await
+    /// Returns error if:
+    /// - API request fails
+    /// - Tool execution fails
+    /// - Response processing fails
+    pub async fn run_agent_loop_stream(
+        &self,
+        messages: &mut Vec<Value>,
+        system_prompt: &str,
+        tools: &[Value],
+        event_sender: Option<&mpsc::UnboundedSender<events::CoreEvent>>,
+    ) -> Result<(), ApiError> {
+        use futures::stream::StreamExt;
+
+        let mut tool_collector = ToolCallCollector::new();
+        // Initial check of collector state
+        let _ = !tool_collector.is_active();
+        let mut current_text = String::new();
+
+        loop {
+            // Send message start event
+            if let Some(sender) = event_sender {
+                let _ = sender.send(events::CoreEvent::MessageStart);
+            }
+
+            // Create stream request
+            let mut stream = self
+                .create_message_stream(messages, system_prompt, Some(tools))
+                .await?;
+
+            // Process stream events
+            while let Some(event_result) = stream.next().await {
+                let event = event_result?;
+
+                match &event {
+                    StreamEvent::ContentBlockDelta {
+                        delta: Delta::Text { text },
+                        ..
+                    } => {
+                        // Send text delta event
+                        if let Some(sender) = event_sender {
+                            let _ = sender.send(events::CoreEvent::TextDelta(text.clone()));
+                        }
+                        current_text.push_str(text);
+                    },
+
+                    StreamEvent::ContentBlockStart {
+                        content_block: ContentBlock::ToolUse { id, name, .. },
+                        ..
+                    } => {
+                        // Send tool call start event
+                        if let Some(sender) = event_sender {
+                            let _ = sender.send(events::CoreEvent::ToolCallStart {
+                                id: id.clone(),
+                                name: name.clone(),
+                            });
+                        }
+                    },
+
+                    StreamEvent::Error { error } => {
+                        // Send error event
+                        if let Some(sender) = event_sender {
+                            let _ = sender.send(events::CoreEvent::Error(error.to_string()));
+                        }
+                    },
+
+                    StreamEvent::MessageStop => {
+                        // Send message stop event
+                        if let Some(sender) = event_sender {
+                            let _ = sender.send(events::CoreEvent::MessageStop);
+                        }
+                        break;
+                    },
+
+                    _ => {
+                        // Other events don't need special handling
+                    },
+                }
+
+                // Process event for tool collection after match
+                tool_collector.process_event(&event);
+            }
+
+            // Check if there are completed tool calls
+            if tool_collector.has_completed_calls() {
+                let tool_calls = tool_collector.take_completed();
+
+                // Build assistant message content
+                let mut content_blocks = vec![json!({
+                    "type": "text",
+                    "text": current_text
+                })];
+
+                for call in &tool_calls {
+                    content_blocks.push(json!({
+                        "type": "tool_use",
+                        "id": call.id,
+                        "name": call.name,
+                        "input": call.input
+                    }));
+                }
+
+                // Save assistant message
+                messages.push(json!({
+                    "role": "assistant",
+                    "content": content_blocks
+                }));
+
+                // Execute tools
+                for call in tool_calls {
+                    // Send tool execution start event
+                    if let Some(sender) = event_sender {
+                        let _ = sender.send(events::CoreEvent::ToolExecuting {
+                            name: call.name.clone(),
+                        });
+                    }
+
+                    let result = self
+                        .run_tool(
+                            &call.name,
+                            call.input.as_object().ok_or_else(|| {
+                                ApiError::ParseError(format!(
+                                    "Tool input is not an object for tool: {}",
+                                    call.name
+                                ))
+                            })?,
+                        )
+                        .await;
+
+                    // Send tool result event
+                    if let Some(sender) = event_sender {
+                        let _ = sender.send(events::CoreEvent::ToolResult {
+                            name: call.name.clone(),
+                            result: result.clone(),
+                        });
+                    }
+
+                    // Add tool result to message history
+                    messages.push(json!({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": call.id,
+                            "content": result
+                        }]
+                    }));
+                }
+
+                // Clear current text and continue loop
+                current_text = String::new();
+            } else if !current_text.is_empty() {
+                // No tool calls, save final reply and exit
+                messages.push(json!({
+                    "role": "assistant",
+                    "content": [{
+                        "type": "text",
+                        "text": current_text
+                    }]
+                }));
+                break;
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Execute a single tool call.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Tool name
+    /// * `input` - Tool input parameters
+    ///
+    /// # Returns
+    ///
+    /// Tool result as string, or error message
+    async fn run_tool(&self, name: &str, input: &serde_json::Map<String, Value>) -> String {
+        let input_value = json!(input);
+        match self.tool_registry.execute(name, &input_value).await {
+            Ok(result) => result,
+            Err(e) => format!("error: {e}"),
+        }
     }
 }
 
@@ -622,10 +694,11 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_call_collector() {
+    fn test_tool_call_collector_multiple() {
         let mut collector = ToolCallCollector::new();
 
-        collector.process_event(&InternalEvent::ContentBlockStart {
+        // Simulate first tool call
+        collector.process_event(&StreamEvent::ContentBlockStart {
             index: 0,
             content_block: ContentBlock::ToolUse {
                 id: "call_1".to_string(),
@@ -634,24 +707,72 @@ mod tests {
             },
         });
 
-        collector.process_event(&InternalEvent::ContentBlockDelta {
+        collector.process_event(&StreamEvent::ContentBlockDelta {
             index: 0,
             delta: Delta::InputJson {
-                partial_json: r#"{"path":"test.rs"}"#.to_string(),
+                partial_json: r#"{"path":"file1.rs"}"#.to_string(),
             },
         });
 
-        collector.process_event(&InternalEvent::ContentBlockStop { index: 0 });
+        collector.process_event(&StreamEvent::ContentBlockStop { index: 0 });
 
+        // Simulate second tool call
+        collector.process_event(&StreamEvent::ContentBlockStart {
+            index: 1,
+            content_block: ContentBlock::ToolUse {
+                id: "call_2".to_string(),
+                name: "write".to_string(),
+                input: json!(""),
+            },
+        });
+
+        collector.process_event(&StreamEvent::ContentBlockDelta {
+            index: 1,
+            delta: Delta::InputJson {
+                partial_json: r#"{"path":"file2.rs","content":"test"}"#.to_string(),
+            },
+        });
+
+        collector.process_event(&StreamEvent::ContentBlockStop { index: 1 });
+
+        // Verify collection
         assert!(collector.has_completed_calls());
         let calls = collector.take_completed();
-        assert_eq!(calls.len(), 1);
-        assert!(calls.first().is_some_and(|c| c.name == "read"));
+        assert_eq!(calls.len(), 2);
+        // Use let-else pattern instead of if-else
+        let Some(first_call) = calls.first() else {
+            return; // Empty vector: test passes early
+        };
+        let Some(second_call) = calls.get(1) else {
+            return; // Single element vector: test passes early
+        };
+        assert_eq!(first_call.name, "read");
+        assert_eq!(second_call.name, "write");
     }
 
     #[test]
-    fn test_stream_event_debug() {
-        let event = StreamEvent::TextDelta("Hello".to_string());
-        let _ = format!("{event:?}");
+    fn test_tool_call_collector_incomplete() {
+        let mut collector = ToolCallCollector::new();
+
+        // Simulate tool call start but without end
+        collector.process_event(&StreamEvent::ContentBlockStart {
+            index: 0,
+            content_block: ContentBlock::ToolUse {
+                id: "call_123".to_string(),
+                name: "read".to_string(),
+                input: json!(""),
+            },
+        });
+
+        collector.process_event(&StreamEvent::ContentBlockDelta {
+            index: 0,
+            delta: Delta::InputJson {
+                partial_json: r#"{"file_path":"test.rs"}"#.to_string(),
+            },
+        });
+
+        // Verify incomplete
+        assert!(!collector.has_completed_calls());
+        assert!(collector.is_active());
     }
 }
